@@ -11,25 +11,25 @@
     <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Font: JetBrains Mono (Professional Coding/Terminal Font) -->
+    <!-- Font: Inter (Modern Sans) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
         <style>
-        /* --- USER PROVIDED STYLE --- */
+        /* --- PROFESSIONAL MODERN THEME --- */
             :root {
             --border-radius-500: 8px;
-            --color-on-background: #f0f0f0; /* Brighter White */
-            --fonts-primary: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
-            --bg-color: #050505; /* Deepest Black */
-            --panel-bg: #111;
+            --color-on-background: #e2e8f0; /* Slate 200 */
+            --fonts-primary: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --bg-color: #0f172a; /* Slate 900 */
+            --panel-bg: #1e293b; /* Slate 800 */
             
-            /* NEON PALETTE */
-            --neon-blue: #00f3ff;
-            --neon-green: #0aff60;
-            --neon-pink: #ff0099;
-            --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+            /* MODERN PALETTE (No Neon) */
+            --accent-primary: #3b82f6; /* Blue 500 */
+            --accent-secondary: #8b5cf6; /* Violet 500 */
+            --accent-success: #10b981; /* Emerald 500 */
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         * {
@@ -39,11 +39,12 @@
             body {
             background-color: var(--bg-color);
             font-family: var(--fonts-primary);
-            font-size: 15px; /* Bumped up for readability */
+            font-size: 15px;
             margin: 0;
             min-height: 100vh;
             color: var(--color-on-background);
             overflow-x: hidden;
+            line-height: 1.5;
         }
 
         .layout__wrapper {
@@ -57,27 +58,26 @@
 
         .layout__header {
             flex-shrink: 0;
-            background: rgba(10, 10, 10, 0.9);
+            background: rgba(15, 23, 42, 0.8); /* Slate 900 with opacity */
             border-bottom: var(--glass-border);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(12px);
         }
 
         .app-bar {
                 display: flex;
             justify-content: space-between;
                 align-items: center;
-            padding: 0 1.5rem 0 5rem; /* Added 5rem padding-left for macOS traffic lights */
+            padding: 0 1.5rem 0 5rem;
             height: 60px;
                 -webkit-app-region: drag;
         }
 
         .app-bar__title {
-            color: #fff;
+            color: #f8fafc; /* Slate 50 */
             font-size: 1rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3); /* Subtle Glow */
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            /* Removed text-shadow for clean look */
             display: flex;
             align-items: center;
             gap: 15px;
@@ -85,15 +85,22 @@
 
         .status-indicator {
             font-size: 0.75rem;
-            font-weight: normal;
-                padding: 2px 8px;
-                border-radius: 4px;
+            font-weight: 500;
+                padding: 4px 10px;
+                border-radius: 20px; /* Pill shape */
             letter-spacing: 0;
-            text-shadow: none;
-            opacity: 0.8;
         }
-        .status-indicator.connected { color: var(--neon-green); border: 1px solid rgba(10, 255, 96, 0.3); box-shadow: 0 0 5px rgba(10, 255, 96, 0.2); }
-        .status-indicator.disconnected { color: #ff4444; border: 1px solid rgba(255, 68, 68, 0.3); }
+        .status-indicator.connected { 
+            color: #d1fae5; /* Emerald 100 */
+            background: rgba(16, 185, 129, 0.2); /* Emerald 500 bg */
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            box-shadow: none;
+        }
+        .status-indicator.disconnected { 
+            color: #fee2e2; 
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3); 
+        }
 
         .app-bar__actions {
             display: flex;
@@ -102,27 +109,27 @@
         }
 
         .btn-action {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
             border: var(--glass-border);
-            color: #ccc;
-            padding: 6px 14px;
-                border-radius: 4px;
+            color: #94a3b8; /* Slate 400 */
+            padding: 8px 16px;
+                border-radius: 6px;
                 cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-family: var(--fonts-primary);
             transition: all 0.2s;
             font-weight: 500;
         }
         .btn-action:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+            color: #f1f5f9;
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: none;
         }
         select.btn-action {
             appearance: none;
             padding-right: 30px;
-            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23CCCCCC%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
             background-repeat: no-repeat;
             background-position: right 10px top 50%;
             background-size: 10px auto;
@@ -152,27 +159,27 @@
         .holder.marked-list {
             flex: 3; /* 30% Width */
             min-width: 200px;
-            background: #080808; /* Slightly darker */
+            background: #0b1120; /* Darker Slate */
         }
         
         .holder:last-child { border-right: none; }
 
         .holder__title {
-            background-color: rgba(255, 255, 255, 0.02);
+            background-color: rgba(30, 41, 59, 0.4); /* Slate 800 transparent */
             border-bottom: var(--glass-border);
-            color: var(--neon-blue); /* Radio Neon Blue */
-            font-weight: 700;
+            color: var(--accent-primary); /* Blue */
+            font-weight: 600;
             font-size: 0.85rem;
             padding: 1rem 1.5rem;
                 text-transform: uppercase;
-            letter-spacing: 1.5px;
-            text-shadow: 0 0 8px rgba(0, 243, 255, 0.4); /* Blue Glow */
+            letter-spacing: 1px;
+            /* Removed neon glow */
             flex-shrink: 0;
         }
 
         .holder--tint-2 .holder__title {
-            color: var(--neon-pink); /* Marked items get Pink */
-            text-shadow: 0 0 8px rgba(255, 0, 153, 0.4);
+            color: var(--accent-secondary); /* Violet */
+            text-shadow: none;
         }
         
         .holder__content {
@@ -246,72 +253,73 @@
 
         /* Tutor Avatar (Right) */
         .avatar.tutor {
-            background: var(--neon-blue);
-            box-shadow: 0 0 10px rgba(0, 243, 255, 0.4);
+            background: var(--accent-primary);
+            color: white;
         }
         /* Student Avatar (Left) */
         .avatar.student {
-            background: var(--neon-green);
-            box-shadow: 0 0 10px rgba(10, 255, 96, 0.4);
+            background: var(--accent-success);
+            color: white;
         }
 
         .chat-bubble {
             padding: 12px 18px;
             border-radius: 18px;
             position: relative;
-            color: #fff;
+            color: #f1f5f9; /* Slate 100 */
             font-size: 1rem;
-            line-height: 1.5;
-            border: 1px solid rgba(255,255,255,0.1);
+            line-height: 1.6;
+            border: 1px solid rgba(255,255,255,0.05);
             transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             transform-origin: center bottom;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         /* --- STAIRCASE HOVER EFFECT --- */
         /* When hovering a bubble, scale it up significantly */
         .list__item:hover .chat-bubble {
-            transform: scale(1.15);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            transform: scale(1.05); /* Reduced scale for subtler effect */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
             z-index: 10;
-            border-color: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
         /* Scale up the previous sibling slightly */
         .list:has(.list__item:hover) .list__item:hover + .list__item .chat-bubble {
-            transform: scale(1.05);
-            opacity: 0.8;
+            transform: scale(1.02);
+            opacity: 0.9;
         }
         
         /* Scale up the next sibling slightly (using :has to look ahead) */
         .list__item:has(+ .list__item:hover) .chat-bubble {
-            transform: scale(1.05);
-            opacity: 0.8;
+            transform: scale(1.02);
+            opacity: 0.9;
         }
         /* ----------------------------- */
 
         /* Center Bubble (Neutral) */
         .chat-bubble.center {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.1);
             border-radius: 18px; /* Fully rounded when center */
-            color: #aaa;
+            color: #94a3b8; /* Slate 400 */
             text-align: center;
             min-width: 200px;
         }
 
         /* Left Bubble (Student) */
         .chat-bubble.left {
-            background: rgba(10, 255, 96, 0.1); /* Green Tint */
+            background: rgba(16, 185, 129, 0.1); /* Emerald Tint */
             border-bottom-left-radius: 4px;
-            border-color: rgba(10, 255, 96, 0.3);
-            color: #eee;
+            border-color: rgba(16, 185, 129, 0.2);
+            color: #e2e8f0;
         }
         /* Right Bubble (Tutor) */
         .chat-bubble.right {
-            background: rgba(0, 243, 255, 0.1); /* Blue Tint */
+            background: rgba(59, 130, 246, 0.1); /* Blue Tint */
             border-bottom-right-radius: 4px;
-            border-color: rgba(0, 243, 255, 0.3);
-            color: #eee;
+            border-color: rgba(59, 130, 246, 0.2);
+            color: #e2e8f0;
         }
 
         .chat-bubble:hover {
@@ -324,7 +332,11 @@
             color: #bbb; 
             font-style: italic;
             border-style: dashed;
-            opacity: 0.8;
+            opacity: 1; /* Full opacity for active item */
+            transform: scale(1.15); /* Active Stair Effect */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            border-color: rgba(255, 255, 255, 0.4);
         }
 
         /* Scrollbar */
@@ -379,6 +391,7 @@
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [existingStudents, setExistingStudents] = useState([]);
             const [isHelpOpen, setIsHelpOpen] = useState(false); // Help Modal State
+            const [isExportOpen, setIsExportOpen] = useState(false); // Export Modal State
 
             // Handle global events for data coming from Overview/WS
             useEffect(() => {
@@ -386,12 +399,15 @@
                     setExistingStudents(e.detail);
                 };
                 const handleShowHelp = () => setIsHelpOpen(true);
+                const handleTriggerExport = () => setIsExportOpen(true);
 
                 window.addEventListener('UPDATE_STUDENT_LIST', handleStudentList);
                 window.addEventListener('SHOW_HELP', handleShowHelp);
+                window.addEventListener('TRIGGER_EXPORT', handleTriggerExport);
                 return () => {
                     window.removeEventListener('UPDATE_STUDENT_LIST', handleStudentList);
                     window.removeEventListener('SHOW_HELP', handleShowHelp);
+                    window.removeEventListener('TRIGGER_EXPORT', handleTriggerExport);
                 };
             }, []);
 
@@ -428,7 +444,7 @@
                                     ))}
                                 </select>
                                 <button className='btn-action' onClick={() => setIsModalOpen(true)} title="Create a new student profile">New Student</button>
-                                <button className='btn-action' onClick={() => window.dispatchEvent(new CustomEvent('TRIGGER_EXPORT'))} title="Download Session JSON">Export</button>
+                                <button className='btn-action' onClick={() => setIsExportOpen(true)} title="Download Session">Export</button>
                                 <button className='btn-action' onClick={() => window.dispatchEvent(new CustomEvent('SHOW_HELP'))} title="How to use">Help</button>
             </div>
             </div>
@@ -440,6 +456,8 @@
                         studentName={studentName}
                         isModalOpen={isModalOpen}
                         setIsModalOpen={setIsModalOpen}
+                        isExportOpen={isExportOpen}
+                        setIsExportOpen={setIsExportOpen}
                     />
                     <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
                 </div>
@@ -454,11 +472,11 @@
                     background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000
                 }} onClick={onClose}>
                     <div style={{
-                        background: '#161616', padding: '30px', borderRadius: '12px',
-                        width: '600px', maxWidth: '90vw', border: '1px solid #333', boxShadow: '0 20px 50px black',
-                        color: '#ddd', lineHeight: '1.6'
+                        background: 'var(--panel-bg)', padding: '30px', borderRadius: '12px',
+                        width: '600px', maxWidth: '90vw', border: 'var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        color: 'var(--color-on-background)', lineHeight: '1.6'
                     }} onClick={e => e.stopPropagation()}>
-                        <h2 style={{marginTop:0, color:'#fff'}}>How to Use Semantic Surfer</h2>
+                        <h2 style={{marginTop:0, color:'var(--color-on-background)'}}>How to Use Semantic Surfer</h2>
                         <ul style={{paddingLeft: '20px'}}>
                             <li style={{marginBottom:'10px'}}><strong>🎙️ Live Transcription:</strong> Speak into your microphone. Your voice (Aaron) appears on the RIGHT. The student appears on the LEFT.</li>
                             <li style={{marginBottom:'10px'}}><strong>🔍 Analyze:</strong> Click ANY student bubble (Left side) to analyze it with AI.</li>
@@ -467,12 +485,14 @@
                             <li style={{marginBottom:'10px'}}><strong>👤 Profiles:</strong> Use the dropdown or "New Student" button to switch profiles. This tags the data correctly.</li>
                         </ul>
                         <div style={{textAlign:'right', marginTop:'20px'}}>
-                            <button className="btn-action" onClick={onClose} style={{background:'#00f3ff', color:'#000', fontWeight:'bold'}}>Got it</button>
+                            <button className="btn-action" onClick={onClose} style={{background:'var(--accent-primary)', color:'#fff', fontWeight:'bold', border:'none'}}>Got it</button>
                         </div>
                     </div>
                 </div>
             );
         }
+
+
 
         function AnalysisModal({ isOpen, onClose, onSave, initialData, isLoading }) {
             const [formData, setFormData] = useState({
@@ -508,33 +528,33 @@
                     background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000
                 }}>
                     <div style={{
-                        background: '#161616', padding: '25px', borderRadius: '12px',
-                        width: '500px', maxWidth: '90vw', border: '1px solid #333', boxShadow: '0 20px 50px black'
+                        background: 'var(--panel-bg)', padding: '25px', borderRadius: '12px',
+                        width: '500px', maxWidth: '90vw', border: 'var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
                     }}>
-                        <h3 style={{marginTop: 0, color: '#fff', fontSize:'1.1rem', marginBottom: '20px'}}>
+                        <h3 style={{marginTop: 0, color: 'var(--color-on-background)', fontSize:'1.1rem', marginBottom: '20px'}}>
                             Create Analysis Card
                         </h3>
 
                         {isLoading ? (
-                            <div style={{color: '#888', textAlign: 'center', padding: '40px'}}>
+                            <div style={{color: '#94a3b8', textAlign: 'center', padding: '40px'}}>
                                 Analyzing with AssemblyAI...
                             </div>
                         ) : (
                             <>
                                 <div style={{marginBottom: '15px'}}>
-                                    <label style={{display:'block', color:'#888', fontSize:'0.8rem', marginBottom:'5px'}}>Student Said</label>
-                                    <div style={{padding: '10px', background: '#222', borderRadius: '6px', color: '#fff', fontStyle: 'italic'}}>
+                                    <label style={{display:'block', color:'#94a3b8', fontSize:'0.8rem', marginBottom:'5px'}}>Student Said</label>
+                                    <div style={{padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', color: 'var(--color-on-background)', fontStyle: 'italic'}}>
                                         "{formData.detectedTrigger}"
                                     </div>
                                 </div>
 
                                 <div style={{marginBottom: '15px'}}>
-                                    <label style={{display:'block', color:'#888', fontSize:'0.8rem', marginBottom:'5px'}}>Category</label>
+                                    <label style={{display:'block', color:'#94a3b8', fontSize:'0.8rem', marginBottom:'5px'}}>Category</label>
                                     <select 
                                         name="category" 
                                         value={formData.category} 
                                         onChange={handleChange}
-                                        style={{width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '4px'}}
+                                        style={{width: '100%', padding: '10px', background: 'var(--bg-color)', border: 'var(--glass-border)', color: 'var(--color-on-background)', borderRadius: '4px'}}
                                     >
                                         <option value="VOCAB_GAP">Vocabulary Gap</option>
                                         <option value="GRAMMAR_ERR">Grammar Error</option>
@@ -545,29 +565,29 @@
                                 </div>
 
                                 <div style={{marginBottom: '15px'}}>
-                                    <label style={{display:'block', color:'#888', fontSize:'0.8rem', marginBottom:'5px'}}>Correction</label>
+                                    <label style={{display:'block', color:'#94a3b8', fontSize:'0.8rem', marginBottom:'5px'}}>Correction</label>
                                     <input 
                                         name="suggestedCorrection" 
                                         value={formData.suggestedCorrection} 
                                         onChange={handleChange}
-                                        style={{width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '4px'}}
+                                        style={{width: '100%', padding: '10px', background: 'var(--bg-color)', border: 'var(--glass-border)', color: 'var(--color-on-background)', borderRadius: '4px'}}
                                     />
                                 </div>
 
                                 <div style={{marginBottom: '20px'}}>
-                                    <label style={{display:'block', color:'#888', fontSize:'0.8rem', marginBottom:'5px'}}>Explanation</label>
+                                    <label style={{display:'block', color:'#94a3b8', fontSize:'0.8rem', marginBottom:'5px'}}>Explanation</label>
                                     <textarea 
                                         name="explanation" 
                                         value={formData.explanation} 
                                         onChange={handleChange}
                                         rows={3}
-                                        style={{width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '4px', resize: 'vertical'}}
+                                        style={{width: '100%', padding: '10px', background: 'var(--bg-color)', border: 'var(--glass-border)', color: 'var(--color-on-background)', borderRadius: '4px', resize: 'vertical'}}
                                     />
                                 </div>
 
                                 <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end'}}>
                                     <button className="btn-action" onClick={onClose} style={{background:'transparent', border:'none'}}>Cancel</button>
-                                    <button className="btn-action" onClick={() => onSave(formData)} style={{background: '#00f3ff', borderColor:'#00f3ff', color:'#000', fontWeight: 'bold'}}>Save Card</button>
+                                    <button className="btn-action" onClick={() => onSave(formData)} style={{background: 'var(--accent-primary)', borderColor:'var(--accent-primary)', color:'#fff', fontWeight: 'bold'}}>Save Card</button>
                                 </div>
                             </>
                         )}
@@ -594,16 +614,16 @@
                     background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000
                 }}>
                     <div style={{
-                        background: '#161616', padding: '20px', borderRadius: '8px',
-                        minWidth: '300px', border: '1px solid #333', boxShadow: '0 10px 25px black'
+                        background: 'var(--panel-bg)', padding: '20px', borderRadius: '8px',
+                        minWidth: '300px', border: 'var(--glass-border)', boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
                     }}>
-                        <h3 style={{marginTop: 0, color: '#e0e0e0', fontWeight:'normal', fontSize:'1rem'}}>New Student Profile</h3>
+                        <h3 style={{marginTop: 0, color: 'var(--color-on-background)', fontWeight:'normal', fontSize:'1rem'}}>New Student Profile</h3>
                         <input 
                             ref={inputRef}
                             style={{
                                 width: '100%', padding: '10px', marginBottom: '15px',
-                                background: '#0a0a0a', border: '1px solid #333',
-                                color: '#e0e0e0', borderRadius: '4px', fontFamily: 'inherit'
+                                background: 'var(--bg-color)', border: 'var(--glass-border)',
+                                color: 'var(--color-on-background)', borderRadius: '4px', fontFamily: 'inherit'
                             }}
                             placeholder="Enter name..."
                             value={inputValue}
@@ -612,28 +632,82 @@
                         />
                         <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end'}}>
                             <button className="btn-action" onClick={onClose} style={{background:'transparent', border:'none'}}>Cancel</button>
-                            <button className="btn-action" onClick={() => onSave(inputValue)} style={{background: '#238636', borderColor:'#238636', color:'white'}}>Create Profile</button>
+                            <button className="btn-action" onClick={() => onSave(inputValue)} style={{background: 'var(--accent-success)', borderColor:'var(--accent-success)', color:'white'}}>Create Profile</button>
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function Overview({ setStudentName, setConnectionStatus, studentName, isModalOpen, setIsModalOpen }) {
+        function ExportModal({ isOpen, onClose, ws }) {
+            if (!isOpen) return null;
+
+            const handleExport = (format) => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        message_type: "export_session",
+                        format: format
+                    }));
+                    // We don't close immediately, wait for confirmation or just close
+                    onClose();
+                    alert(`Exporting as ${format.toUpperCase()}... Check the sessions folder.`);
+                } else {
+                    alert("Not connected to server.");
+                }
+            };
+
+            return (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000
+                }} onClick={onClose}>
+                    <div style={{
+                        background: 'var(--panel-bg)', padding: '30px', borderRadius: '12px',
+                        width: '400px', maxWidth: '90vw', border: 'var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        color: 'var(--color-on-background)', display: 'flex', flexDirection: 'column', gap: '15px'
+                    }} onClick={e => e.stopPropagation()}>
+                        <h2 style={{marginTop:0, color:'var(--color-on-background)', textAlign:'center'}}>Export Session</h2>
+                        <p style={{textAlign:'center', color:'#94a3b8', fontSize:'0.9rem'}}>Select a format to save the session transcript and notes.</p>
+                        
+                        <button className="btn-action" onClick={() => handleExport('json')} style={{padding:'15px', textAlign:'left', background:'rgba(255,255,255,0.03)', border:'var(--glass-border)', display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'var(--color-on-background)', fontWeight:'bold'}}>JSON (Raw Data)</span>
+                            <span style={{fontSize:'0.8rem', color:'#94a3b8'}}>Full session data with analysis metadata.</span>
+                        </button>
+
+                        <button className="btn-action" onClick={() => handleExport('markdown')} style={{padding:'15px', textAlign:'left', background:'rgba(255,255,255,0.03)', border:'var(--glass-border)', display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'var(--color-on-background)', fontWeight:'bold'}}>Markdown (Notion/Obsidian)</span>
+                            <span style={{fontSize:'0.8rem', color:'#94a3b8'}}>Formatted text with headers and bold speakers.</span>
+                        </button>
+
+                        <button className="btn-action" onClick={() => handleExport('txt')} style={{padding:'15px', textAlign:'left', background:'rgba(255,255,255,0.03)', border:'var(--glass-border)', display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'var(--color-on-background)', fontWeight:'bold'}}>Plain Text</span>
+                            <span style={{fontSize:'0.8rem', color:'#94a3b8'}}>Simple text file for copy-pasting.</span>
+                        </button>
+
+                        <button className="btn-action" onClick={onClose} style={{marginTop:'10px', background:'transparent', border:'none', color:'#94a3b8'}}>Cancel</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function Overview({ setStudentName, setConnectionStatus, studentName, isModalOpen, setIsModalOpen, isExportOpen, setIsExportOpen }) {
             const [items, setItems] = useState(INITIAL_DATA);
             const [ws, setWs] = useState(null);
             const itemsRef = useRef(INITIAL_DATA);
             
+            // Notes State
+            const [notes, setNotes] = useState('');
+            const [isNotesCollapsed, setIsNotesCollapsed] = useState(false);
+
             // Analysis Modal State
             const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
             const [analysisLoading, setAnalysisLoading] = useState(false);
             const [currentAnalysisData, setCurrentAnalysisData] = useState(null);
-            const [pendingCardItem, setPendingCardItem] = useState(null); // The item being analyzed
+            const [pendingCardItem, setPendingCardItem] = useState(null);
 
-            // Keyboard Shortcuts for Quick Marking
+            // Keyboard Shortcuts
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    // Ignore if typing in an input
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
                     const keyMap = {
@@ -644,19 +718,15 @@
                         '5': 'AVOIDANCE'
                     };
 
-                    // Check for Numpad keys (Numpad1, etc.) or standard number keys
                     const key = e.code.replace('Numpad', '').replace('Digit', '');
                     const category = keyMap[key];
 
                     if (category) {
-                        // Find the LAST COMPLETE student item
-                        // We traverse backwards from the end of live list
                         const liveList = itemsRef.current[0].items;
                         let targetItem = null;
                         
                         for (let i = liveList.length - 1; i >= 0; i--) {
                             const item = liveList[i];
-                            // Must not be partial, must not be Tutor (right side)
                             const isTutor = item.speaker && (item.speaker.includes("Aaron") || item.speaker === "A");
                             if (!item.isPartial && !isTutor) {
                                 targetItem = item;
@@ -665,7 +735,6 @@
                         }
 
                         if (targetItem) {
-                            // Trigger Analysis Flow
                             handleCardClick(targetItem, category);
                         }
                     }
@@ -685,47 +754,26 @@
                 const socket = new WebSocket("ws://localhost:8765");
                 setWs(socket);
 
-                socket.onopen = () => {
-                    setConnectionStatus("Connected");
-                };
+                socket.onopen = () => setConnectionStatus("Connected");
                 socket.onclose = () => setConnectionStatus("Disconnected");
                 socket.onerror = () => setConnectionStatus("Error");
 
                 socket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.message_type === "partial") {
+                    const data = JSON.parse(event.data);
+                    if (data.message_type === "partial") {
                         handlePartial(data.text);
                     } else if (data.message_type === "transcript") {
                         handleFinal(data);
                     } else if (data.message_type === "student_list") {
                         window.dispatchEvent(new CustomEvent('UPDATE_STUDENT_LIST', { detail: data.students }));
                     } else if (data.message_type === "analysis_result") {
-                        // Handle AI Analysis Result
                         setAnalysisLoading(false);
-                        setCurrentAnalysisData(prev => {
-                            // If we already have a category set (e.g. from Numpad shortcut), PRESERVE IT.
-                            // Only use AI category if we defaulted to 'VOCAB_GAP' (or if we want AI to override? 
-                            // User preference: Numpad is explicit intent. Keep it.)
-                            
-                            const userIntentCategory = prev.category;
-                            const aiCategory = data.result.category;
-                            
-                            // Simple logic: If user pressed a key, prev.category might differ from default.
-                            // But handleCardClick sets default to VOCAB_GAP.
-                            // Let's just prioritize the AI's correction/explanation, but maybe keep the category 
-                            // if the user *just* pressed it? 
-                            // Actually, AI might detect 'GRAMMAR_ERR' when user pressed '1' (Vocab).
-                            // Let's trust the AI for the text fields, but if the user explicitly opened it via shortcut,
-                            // maybe we should respect that? 
-                            // For now, let's just fill in the missing pieces.
-                            
-                            return {
-                                ...prev,
-                                ...data.result, // This overwrites category.
-                                category: userIntentCategory && userIntentCategory !== 'VOCAB_GAP' ? userIntentCategory : data.result.category,
-                                detectedTrigger: prev.detectedTrigger
-                            };
-                        });
+                        setCurrentAnalysisData(prev => ({
+                            ...prev,
+                            ...data.result,
+                            category: prev.category && prev.category !== 'VOCAB_GAP' ? prev.category : data.result.category,
+                            detectedTrigger: prev.detectedTrigger
+                        }));
                     }
                 };
                 
@@ -735,17 +783,9 @@
                         const liveList = [...newItems[0].items];
                         const lastItem = liveList[liveList.length - 1];
                         
-                        // For partials, we assume last speaker or default to Left (Student) if unknown
-                        // Or maybe we can't know yet, so keep it neutral? 
-                        // Let's assume partials update the LAST bubble if it exists.
-                        
                         if (lastItem && lastItem.isPartial) {
                             liveList[liveList.length - 1] = { ...lastItem, text: text + "..." };
                         } else {
-                            // New partial bubble
-                            // We default to Student (Left) until we know otherwise? 
-                            // Or better: Create a temp bubble that is 'neutral'.
-                            // For now, let's default to Left/Student.
                             liveList.push({ 
                                 id: 'temp-' + Date.now(), 
                                 text: text + "...", 
@@ -766,13 +806,7 @@
                             liveList.pop();
                         }
                         
-                        // Determine Side based on Speaker
-                        // Logic: Aaron/Tutor -> Right. Everyone else -> Left.
                         let speaker = data.speaker || "Unknown";
-                        // We need to detect if it's Aaron.
-                        // main.py sends the literal string from config if speaker is not detected, OR 'A'/'B'.
-                        
-                        // Store structured data
                         liveList.push({ 
                             id: 'turn-' + data.turn_order, 
                             text: data.text, 
@@ -789,17 +823,14 @@
                 return () => socket.close();
             }, []);
 
-            // Listen for Export and Profile Switch
+            // Listen for Export, Profile Switch, and Toggle Notes
             useEffect(() => {
                 const handleExport = () => {
                     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(itemsRef.current, null, 2));
                     const downloadAnchorNode = document.createElement('a');
                     downloadAnchorNode.setAttribute("href", dataStr);
-                    
-                    // Sanitized filename: StudentName-session-Timestamp.json
                     const safeName = studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
                     downloadAnchorNode.setAttribute("download", `${safeName}-session-${Date.now()}.json`);
-                    
                     document.body.appendChild(downloadAnchorNode);
                     downloadAnchorNode.click();
                     downloadAnchorNode.remove();
@@ -821,15 +852,33 @@
                     }
                 };
 
+                const handleToggleNotes = () => {
+                    setIsNotesCollapsed(prev => !prev);
+                };
+
                 window.addEventListener('TRIGGER_EXPORT', handleExport);
                 window.addEventListener('SWITCH_PROFILE', handleSwitchProfile);
+                window.addEventListener('TOGGLE_NOTES', handleToggleNotes);
                 return () => {
                     window.removeEventListener('TRIGGER_EXPORT', handleExport);
                     window.removeEventListener('SWITCH_PROFILE', handleSwitchProfile);
+                    window.removeEventListener('TOGGLE_NOTES', handleToggleNotes);
                 };
-            }, [ws]);
+            }, [ws, studentName]);
 
-            // Handle Modal Save
+            // Auto-save notes logic (debounced)
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            message_type: "update_notes",
+                            notes: notes
+                        }));
+                    }
+                }, 1000); // Save 1s after last keystroke
+                return () => clearTimeout(timer);
+            }, [notes, ws]);
+
             const handleNewProfileSave = (name) => {
                 if (name) {
                     setStudentName(name);
@@ -849,17 +898,14 @@
 
             const handleCardClick = (item, preFilledCategory = null) => {
                 if (item.isPartial) return;
-                
-                // 1. Open the Analysis Modal immediately in "Loading" state
                 setPendingCardItem(item);
                 setIsAnalysisOpen(true);
                 setAnalysisLoading(true);
                 setCurrentAnalysisData({ 
                     detectedTrigger: item.text,
-                    category: preFilledCategory || 'VOCAB_GAP' // Use keypress category if available
+                    category: preFilledCategory || 'VOCAB_GAP' 
                 }); 
 
-                // 2. Send analysis request to Backend
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         message_type: "analyze_turn",
@@ -867,15 +913,12 @@
                         turn_id: item.id
                     }));
                 } else {
-                    // Fallback if offline
                     setAnalysisLoading(false);
                 }
             };
 
             const handleAnalysisSave = (formData) => {
                 if (!pendingCardItem) return;
-
-                // Construct final payload for Sanity
                 const cardPayload = {
                     detectedTrigger: formData.detectedTrigger,
                     category: formData.category,
@@ -887,12 +930,10 @@
                     }
                 };
 
-                // Send to Sanity
                 window.electron.saveCardToSanity(cardPayload)
                     .then(response => {
                         if (response.success) {
                             console.log("Card saved to Sanity:", response.id);
-                            // Visual feedback (add to marked list)
                             setItems(prev => {
                                 const newItems = [...prev];
                                 newItems[1].items.push({ 
@@ -911,7 +952,7 @@
             };
 
             return (
-                <div className="overview-container">
+                <div className="overview-container" style={{flexDirection: 'column', height: '100%'}}>
                     <Modal 
                         isOpen={isModalOpen} 
                         onClose={() => setIsModalOpen(false)} 
@@ -924,20 +965,78 @@
                         onClose={() => setIsAnalysisOpen(false)}
                         onSave={handleAnalysisSave}
                     />
-                    {/* GROUP 1: LIVE TRANSCRIPT (Chat) - 70% */}
-                    <div className="holder live-transcript">
-                        <div className='holder__title'>Live Session</div>
-                        <div className='holder__content'>
-                            <List items={items[0].items} onCardClick={handleCardClick} groupId="live" studentName={studentName} />
+                    <ExportModal
+                        isOpen={isExportOpen}
+                        onClose={() => setIsExportOpen(false)}
+                        ws={ws}
+                    />
+                    
+                    {/* MAIN CONTENT AREA (Flex Grow) */}
+                    <div style={{display: 'flex', flex: 1, overflow: 'hidden', borderBottom: 'var(--glass-border)'}}>
+                        {/* GROUP 1: LIVE TRANSCRIPT (Chat) - 70% */}
+                        <div className="holder live-transcript">
+                            <div className='holder__title'>Live Session</div>
+                            <div className='holder__content'>
+                                <List items={items[0].items} onCardClick={handleCardClick} groupId="live" studentName={studentName} />
+                            </div>
+                        </div>
+
+                        {/* GROUP 2: MARKED LIST (Narrow) - 30% */}
+                        <div className="holder marked-list holder--tint-2">
+                            <div className='holder__title'>Marked Items</div>
+                            <div className='holder__content'>
+                                <List items={items[1].items} onCardClick={handleCardClick} groupId="marked" studentName={studentName} />
+                            </div>
                         </div>
                     </div>
 
-                    {/* GROUP 2: MARKED LIST (Narrow) - 30% */}
-                    <div className="holder marked-list holder--tint-2">
-                        <div className='holder__title'>Marked Items</div>
-                        <div className='holder__content'>
-                            <List items={items[1].items} onCardClick={handleCardClick} groupId="marked" studentName={studentName} />
+                    {/* PERSISTENT NOTES FOOTER */}
+                    <div style={{
+                        height: isNotesCollapsed ? '40px' : '200px',
+                        transition: 'height 0.3s ease',
+                        background: 'var(--panel-bg)',
+                        borderTop: 'var(--glass-border)',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        <div 
+                            onClick={() => setIsNotesCollapsed(prev => !prev)}
+                            style={{
+                                padding: '8px 16px',
+                                background: 'rgba(0,0,0,0.2)',
+                                borderBottom: isNotesCollapsed ? 'none' : 'var(--glass-border)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                fontSize: '0.85rem',
+                                fontWeight: '600',
+                                color: 'var(--color-on-background)'
+                            }}
+                        >
+                            <span>📝 Live Notes</span>
+                            <span style={{opacity: 0.6}}>{isNotesCollapsed ? '▲ Show' : '▼ Hide'}</span>
                         </div>
+                        
+                        {!isNotesCollapsed && (
+                            <textarea 
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                placeholder="Type your notes here... (Auto-saved)"
+                                style={{
+                                    flex: 1,
+                                    width: '100%',
+                                    padding: '15px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--color-on-background)',
+                                    fontFamily: 'var(--fonts-primary)',
+                                    fontSize: '14px',
+                                    resize: 'none',
+                                    outline: 'none'
+                                }}
+                            />
+                        )}
                     </div>
                 </div>
             );

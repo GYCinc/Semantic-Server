@@ -1,0 +1,9 @@
+assemblyai
+python-dotenv
+websockets
+pyaudio
+numpy
+psutil
+httpx
+textblob
+supabase

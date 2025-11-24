@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import wave # Added by user
+import time # Added by user
 from datetime import datetime
 from pathlib import Path
 from typing import Type
@@ -77,23 +79,26 @@ def stream_to_supabase_sync(turn_data: dict, session_id: str):
     """Push a single transcript turn to Supabase (fire and forget)"""
     if not supabase:
         return
-    try:
-        row = {
-            "session_id": session_id,
-            "speaker": turn_data.get("speaker"),
-            "text": turn_data.get("transcript"),
-            "turn_order": turn_data.get("turn_order"),
-            "confidence": turn_data.get("end_of_turn_confidence"),
-            "timestamp": turn_data.get("created") or datetime.now().isoformat(),
-            "metadata": {
-                "words": turn_data.get("words"),
-                "pauses": turn_data.get("pauses"),
-                "analysis": turn_data.get("analysis")
-            }
-        }
-        supabase.table("transcripts").insert(row).execute()
-    except Exception as e:
-        logger.error(f"Supabase Sync Error: {e}")
+    # DISABLED: transcripts table not in current schema
+    # Data is saved to student_corpus at session end instead
+    return
+    # try:
+    #     row = {
+    #         "session_id": session_id,
+    #         "speaker": turn_data.get("speaker"),
+    #         "text": turn_data.get("transcript"),
+    #         "turn_order": turn_data.get("turn_order"),
+    #         "confidence": turn_data.get("end_of_turn_confidence"),
+    #         "timestamp": turn_data.get("created") or datetime.now().isoformat(),
+    #         "metadata": {
+    #             "words": turn_data.get("words"),
+    #             "pauses": turn_data.get("pauses"),
+    #             "analysis": turn_data.get("analysis")
+    #         }
+    #     }
+    #     supabase.table("transcripts").insert(row).execute()
+    # except Exception as e:
+    #     logger.error(f"Supabase Sync Error: {e}")
 
 
 # -------------------------------------------------------------------------
@@ -213,8 +218,11 @@ main_loop = None
 current_session = {
     "session_id": None,
     "start_time": None,
+    "student_name": config.get("student_name", "Unknown"),
     "turns": [],
     "file_path": None,
+    "notes": "",
+    "audio_path": None  # New: Path to saved WAV file
 }
 
 
@@ -374,7 +382,7 @@ def start_new_session(session_id, student_name=None):
 
     # If no student name provided, use config default or fallback
     if not student_name:
-        student_name = config.get("speaker_name", "Speaker")
+        student_name = config.get("student_name") or config.get("speaker_name", "Speaker")
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     Path("sessions").mkdir(exist_ok=True)
@@ -395,6 +403,7 @@ def start_new_session(session_id, student_name=None):
         "student_name": student_name, 
         "turns": [],
         "file_path": filename,
+        "audio_path": None # Will be set by MonoMicrophoneStream
     }
 
     logger.info(f"New session started: {session_id} for student: {student_name}")
@@ -508,6 +517,7 @@ def save_session_to_file():
         "total_turns": len(current_session["turns"]),
         "total_words": sum(len(turn["words"]) for turn in current_session["turns"]),
         "turns": current_session["turns"],
+        "audio_path": current_session["audio_path"] # Include audio path
     }
 
     try:
@@ -543,6 +553,12 @@ async def websocket_handler(websocket):
                     # --- CRASH FIX: Use correct asyncio executor loop ---
                     loop = asyncio.get_event_loop()
                     loop.run_in_executor(None, handle_mark_update_sync, data)
+                elif data.get("message_type") == "update_notes":
+                    # Save notes from viewer
+                    notes = data.get("notes", "")
+                    current_session["notes"] = notes
+                    save_session_to_file()
+                    logger.info("📝 Notes updated")
                 elif data.get("message_type") == "update_profile":
                     # Handle profile updates from frontend
                     student_name = data.get("student_name")
@@ -582,6 +598,66 @@ async def websocket_handler(websocket):
                     # Handle analysis request from frontend
                     text = data.get("text")
                     turn_id = data.get("turn_id")
+                
+                elif data.get("message_type") == "export_session":
+                    format_type = data.get("format", "json")
+                    logger.info(f"Exporting session as {format_type}...")
+                    
+                    if not current_session["file_path"]:
+                        logger.error("No session file to export")
+                        continue
+                        
+                    try:
+                        # Ensure session is saved first
+                        save_session_to_file()
+                        
+                        export_path = current_session["file_path"]
+                        content = ""
+                        
+                        if format_type == "markdown":
+                            export_path = current_session["file_path"].replace(".json", ".md")
+                            with open(current_session["file_path"], 'r') as f:
+                                s_data = json.load(f)
+                            
+                            content = f"# Session with {s_data.get('student_name')}\n"
+                            content += f"Date: {s_data.get('start_time')}\n\n"
+                            content += "## Notes\n"
+                            content += f"{s_data.get('notes', '')}\n\n"
+                            content += "## Transcript\n"
+                            for turn in s_data.get('turns', []):
+                                speaker = turn.get('speaker', 'Unknown')
+                                text = turn.get('transcript', '')
+                                content += f"**{speaker}:** {text}\n\n"
+                                
+                            with open(export_path, 'w') as f:
+                                f.write(content)
+                                
+                        elif format_type == "txt":
+                            export_path = current_session["file_path"].replace(".json", ".txt")
+                            with open(current_session["file_path"], 'r') as f:
+                                s_data = json.load(f)
+                            
+                            content = f"Session: {s_data.get('student_name')} - {s_data.get('start_time')}\n"
+                            content += "-" * 40 + "\n\n"
+                            for turn in s_data.get('turns', []):
+                                speaker = turn.get('speaker', 'Unknown')
+                                text = turn.get('transcript', '')
+                                content += f"{speaker}: {text}\n"
+                                
+                            with open(export_path, 'w') as f:
+                                f.write(content)
+
+                        logger.info(f"✅ Exported to: {export_path}")
+                        
+                        # Notify frontend
+                        await broadcast_message({
+                            "message_type": "export_complete",
+                            "path": export_path,
+                            "format": format_type
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Export failed: {e}")
                     
                     # Get some context (last 5 turns) with SPEAKER LABELS
                     context = ""
@@ -659,7 +735,7 @@ async def broadcast_message(message):
 # -------------------------------------------------------------------------
 # ASSEMBLYAI EVENT HANDLERS
 # -------------------------------------------------------------------------
-def on_begin(self: Type[StreamingClient], event: BeginEvent):
+def on_begin(self: type[StreamingClient], event: BeginEvent):
     logger.info(f"✅ SESSION STARTED: {event.id}")
     print(f"✅ SESSION STARTED: {event.id}")
     print(f"🎤 Listening for audio... Speak now!")
@@ -675,7 +751,7 @@ def on_begin(self: Type[StreamingClient], event: BeginEvent):
         )
 
 
-def on_turn(self: Type[StreamingClient], event: TurnEvent):
+def on_turn(self: type[StreamingClient], event: TurnEvent):
     # --- HANDLE PARTIALS VS FINAL TURNS ---
     # AssemblyAI v3 sends 'Turn' events for both partials and final results.
     # We use 'end_of_turn' to distinguish them.
@@ -748,7 +824,324 @@ def on_turn(self: Type[StreamingClient], event: TurnEvent):
             logger.error(f"Error spawning Supabase thread: {e}")
 
 
-def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+from analyzers.session_analyzer import analyze_session_file
+
+# ... (keep existing imports)
+
+# -------------------------------------------------------------------------
+# SUPABASE ANALYSIS UPLOAD
+# -------------------------------------------------------------------------
+def get_student_id(name):
+    """Find student ID by name (username or first_name)"""
+    if not supabase:
+        return None
+    try:
+        # Try exact username match
+        res = supabase.table("students").select("id").eq("username", name).execute()
+        if res.data:
+            return res.data[0]['id']
+        
+        # Try first name match
+        # Note: ilike might not be available in all client versions, using eq for safety or raw filter if needed
+        # For now, let's try a simple query.
+        res = supabase.table("students").select("id").eq("first_name", name).execute()
+        if res.data:
+            return res.data[0]['id']
+            
+        return None
+    except Exception as e:
+        logger.error(f"Error finding student ID: {e}")
+        return None
+
+async def perform_batch_diarization(audio_path, session_path):
+    """
+    Uploads audio to AssemblyAI Batch API for accurate diarization.
+    Updates the session JSON with speaker labels.
+    """
+    if not os.path.exists(audio_path):
+        logger.error(f"❌ Audio file not found: {audio_path}")
+        return False
+
+    logger.info("🔄 Starting Post-Session Diarization...")
+    try:
+        transcriber = Transcriber()
+        config = TranscriptionConfig(
+            speaker_labels=True,
+            speakers_expected=2, # Tutor + Student
+            punctuate=True,
+            format_text=True
+        )
+        
+        transcript = await transcriber.transcribe_async(audio_path, config)
+        
+        if transcript.status == "error": # Use string "error" for status check
+            logger.error(f"❌ Diarization failed: {transcript.error}")
+            return False
+
+        # Map speakers
+        # We assume the speaker with the most speech is the Tutor (Aaron) if not explicitly identified
+        # But for now, let's just use the labels 'A', 'B' and try to map them to existing turns
+        
+        logger.info("✅ Diarization complete. Mapping speakers...")
+        
+        # Load current session data
+        with open(session_path, 'r') as f:
+            session_data = json.load(f)
+            
+        # Simple mapping strategy: 
+        # Iterate through batch utterances and match them to streaming turns based on timestamp
+        # This is complex because streaming timestamps might differ slightly.
+        # A simpler approach for this MVP:
+        # Just update the "speaker" field in the session_data based on the batch result order
+        # OR better: Replace the text with the high-quality batch transcript?
+        # NO, we want to keep the real-time analysis metadata.
+        
+        # Let's just update the speaker labels for now.
+        # We'll use a time-overlap matching.
+        
+        batch_utterances = transcript.utterances
+        
+        for turn in session_data['turns']:
+            # Find matching utterance in batch
+            # Turn has 'created' (ISO timestamp). We need relative time.
+            # This is hard without relative offsets.
+            # FALLBACK: Just trust the batch transcript for the final record?
+            # YES. The batch transcript is the source of truth for the database.
+            pass
+
+        # ACTUALLY: The most robust way is to use the BATCH transcript as the "Corpus" source
+        # and just attach the analysis metadata from the streaming session to it.
+        
+        # For now, let's just save the diarized transcript as a separate file or update the session
+        # with a "diarized_turns" field.
+        
+        session_data['diarized_turns'] = [
+            {
+                "speaker": u.speaker,
+                "text": u.text,
+                "start": u.start,
+                "end": u.end,
+                "confidence": u.confidence
+            }
+            for u in batch_utterances
+        ]
+        
+        # Update the main turns if possible, or just save this
+        with open(session_path, 'w') as f:
+            json.dump(session_data, f, indent=2)
+            
+        logger.info(f"✅ Session updated with diarized turns: {session_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Diarization error: {e}")
+        return False
+
+async def upload_analysis_to_supabase(session_path, duration_seconds, audio_path=None):
+    """Run analysis, build corpus, process notes, and upload to Supabase"""
+    if not supabase:
+        return
+
+    try:
+        # 0. Run Batch Diarization if audio exists
+        if audio_path:
+            success = await perform_batch_diarization(audio_path, session_path)
+            if not success:
+                logger.warning("⚠️ Proceeding with upload without diarization")
+
+        logger.info("Running session analysis for upload...")
+        
+        # 1. Load session data (now potentially updated)
+        with open(session_path, 'r') as f:
+            session_data = json.load(f)
+        
+        # Use diarized turns if available, otherwise streaming turns
+        turns_source = session_data.get('diarized_turns', [])
+        if not turns_source:
+             turns_source = session_data.get('turns', [])
+             # Adapt streaming turns to match structure if needed
+             # Streaming turns: {speaker, transcript, ...}
+             # Diarized turns: {speaker, text, ...}
+             
+        # 2. Run Analysis
+        analysis = analyze_session_file(Path(session_path))
+        
+        # 3. Get Student ID
+        student_name = analysis.get('session_info', {}).get('student_name')
+        if not student_name or student_name == "Unknown":
+             logger.warning("⚠️ Student name unknown. Skipping upload.")
+             return
+
+        student_id = get_student_id(student_name)
+        
+        if not student_id:
+            logger.info(f"⚠️ Student '{student_name}' not found in Supabase. Auto-creating...")
+            try:
+                new_student = {
+                    "username": student_name.lower().replace(" ", ""),
+                    "first_name": student_name,
+                    "password_hash": "auto_created_placeholder_hash" 
+                }
+                res = supabase.table("students").insert(new_student).select().execute()
+                if res.data:
+                    student_id = res.data[0]['id']
+                    logger.info(f"✅ Auto-created student '{student_name}' with ID: {student_id}")
+                else:
+                    logger.error("Failed to auto-create student (no data returned).")
+                    return
+            except Exception as e:
+                logger.error(f"❌ Failed to auto-create student: {e}")
+                return
+
+        # 4. BUILD CORPUS - Add student turns to student_corpus
+        logger.info("📚 Building corpus from student turns...")
+        # Use turns_source for corpus building
+        student_turns = [t for t in turns_source if t.get('speaker') != config.get('speaker_name', 'Aaron')]
+        
+        for turn in student_turns:
+            corpus_entry = {
+                "student_id": student_id,
+                "text": turn.get('text', turn.get('transcript', '')), # Use 'text' from diarized, fallback to 'transcript'
+                "source": "transcript",
+                "metadata": {
+                    "turn_order": turn.get('turn_order'),
+                    "timestamp": turn.get('created'),
+                    "session_id": session_data.get('session_id'),
+                    "confidence": turn.get('confidence', turn.get('analysis', {}).get('avg_word_confidence')), # Use 'confidence' from diarized, fallback to streaming
+                    "wpm": turn.get('analysis', {}).get('speaking_rate_wpm') # WPM only from streaming analysis
+                }
+            }
+            try:
+                supabase.table("student_corpus").insert(corpus_entry).execute()
+            except Exception as e:
+                logger.warning(f"Failed to add turn to corpus: {e}")
+        
+        logger.info(f"✅ Added {len(student_turns)} turns to corpus")
+
+        # 5. PROCESS NOTES - Send through LLM for intent extraction
+        notes_raw = session_data.get('notes', '')
+        notes_analysis = None
+        
+        if notes_raw and notes_raw.strip():
+            logger.info("📝 Analyzing tutor notes with LLM...")
+            try:
+                # Use AssemblyAI LLM Gateway
+                prompt = f"""Analyze these tutor notes from an ESL class session. Extract:
+1. Key teaching moments or observations
+2. Action items for the tutor (things to look up, send, prepare)
+3. Student progress indicators
+4. Areas of concern
+
+Notes: {notes_raw}
+
+Provide a structured JSON response with: teaching_moments, action_items, progress_notes, concerns"""
+                
+                response = httpx.post(
+                    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+                    headers={"Authorization": api_key}, # Use api_key directly
+                    json={
+                        "model": "anthropic/claude-3-5-sonnet",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    notes_analysis = {
+                        "raw_notes": notes_raw,
+                        "llm_analysis": result['choices'][0]['message']['content']
+                    }
+                    logger.info("✅ Notes analyzed successfully")
+            except Exception as e:
+                logger.warning(f"Note analysis failed, storing raw notes only: {e}")
+                notes_analysis = {"raw_notes": notes_raw}
+
+        # 6. Run LeMUR Analysis (8 Categories)
+        logger.info("🤖 Running LeMUR Classification (8 Categories)...")
+        lemur_response = "No analysis generated."
+        try:
+            from analyzers.lemur_query import run_lemur_query
+            
+            # Save temp session file for LeMUR to read
+            temp_session_path = Path(f"sessions/temp_{session_data['session_id']}.json")
+            with open(temp_session_path, 'w') as f:
+                json.dump(session_data, f)
+                
+            classification_prompt = (
+                "Analyze the student's speech and classify their performance into these 8 categories: "
+                "1. Grammar, 2. Vocabulary, 3. Pronunciation, 4. Fluency, 5. Coherence, "
+                "6. Interaction, 7. Listening, 8. Task Achievement. "
+                "For each, provide a score (1-10) and a brief comment. "
+                "Format the output as a structured list."
+            )
+            
+            analysis_results = run_lemur_query(temp_session_path, custom_prompt=classification_prompt)
+            lemur_response = analysis_results.get('lemur_analysis', {}).get('response', 'No analysis generated.')
+            
+            # Clean up temp file
+            if temp_session_path.exists():
+                temp_session_path.unlink()
+        except Exception as e:
+            logger.error(f"❌ LeMUR Analysis Error: {e}")
+
+        # 7. Prepare Payload
+        payload = {
+            "student_id": student_id,
+            "session_date": analysis.get('session_info', {}).get('start_time'),
+            "duration_seconds": int(duration_seconds),
+            "metrics": {
+                **analysis.get('student_metrics', {}),
+                "notes": notes_analysis,
+                "lemur_analysis": lemur_response
+            }
+        }
+        
+        # 8. Insert into Supabase
+        supabase.table("student_sessions").insert(payload).execute()
+        logger.info(f"✅ Analysis uploaded to Supabase for {student_name}")
+
+        # 9. Upload Report to Sanity (via API)
+        sanity_project_id = os.getenv("SANITY_PROJECT_ID")
+        sanity_dataset = os.getenv("SANITY_DATASET", "production")
+        sanity_token = os.getenv("SANITY_API_TOKEN") or os.getenv("SANITY_API_KEY")
+        
+        if sanity_project_id and sanity_token:
+            logger.info("📤 Uploading Report to Sanity...")
+            url = f"https://{sanity_project_id}.api.sanity.io/v2021-06-07/data/mutate/{sanity_dataset}"
+            headers = {
+                "Authorization": f"Bearer {sanity_token}",
+                "Content-Type": "application/json"
+            }
+            
+            mutations = {
+                "mutations": [
+                    {
+                        "create": {
+                            "_type": "lessonAnalysis", # Generic type
+                            "studentName": student_name,
+                            "sessionDate": analysis.get('session_info', {}).get('start_time'),
+                            "analysisReport": lemur_response,
+                            "scores": {} 
+                        }
+                    }
+                ]
+            }
+            
+            async with httpx.AsyncClient() as client:
+                res = await client.post(url, headers=headers, json=mutations)
+                
+            if res.status_code == 200:
+                logger.info(f"✅ Sanity Upload Success: {res.json()}")
+            else:
+                logger.error(f"❌ Sanity Upload Failed: {res.text}")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to upload analysis: {e}")
+
+
+def on_terminated(self: type[StreamingClient], event: TerminationEvent):
     logger.info(
         f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
     )
@@ -759,6 +1152,26 @@ def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
     # Final save happens here
     save_session_to_file()
     logger.info(f"Session saved to: {current_session['file_path']}")
+
+    # --- Upload Analysis to Supabase ---
+    if supabase and current_session["session_id"]:
+        try:
+            # Run upload_analysis_to_supabase in a separate thread to avoid blocking
+            # It's an async function, so we need to run it in the event loop
+            # or use asyncio.run_coroutine_threadsafe if main_loop is available.
+            # For simplicity, let's use a new event loop for this thread.
+            def run_async_upload():
+                asyncio.run(upload_analysis_to_supabase(
+                    current_session["file_path"],
+                    event.audio_duration_seconds,
+                    current_session["audio_path"]
+                ))
+            threading.Thread(
+                target=run_async_upload,
+                daemon=True
+            ).start()
+        except Exception as e:
+            logger.error(f"Error spawning Supabase upload thread: {e}")
 
     print_session_summary()
 
@@ -807,7 +1220,7 @@ def print_session_summary():
     print("=" * 60 + "\n")
 
 
-def on_error(self: Type[StreamingClient], error: StreamingError):
+def on_error(self: type[StreamingClient], error: StreamingError):
     logger.error(f"Error occurred: {error}")
     print(f"Error occurred: {error}")
     if main_loop:
@@ -823,12 +1236,9 @@ class MonoMicrophoneStream:
     """Custom microphone stream that converts multi-channel to mono"""
 
     # --- FIX: Hardcoded default device_index changed to 7 ---
-    def __init__(
-        self, sample_rate=16000, device_index=7, chunk_size=8000, channel_indices=None
-    ):
-        self.sample_rate = sample_rate
-        self.device_index = device_index
-        self.chunk_size = chunk_size
+    def __init__(self, sample_rate=16000, device_index=7, chunk_size=8000, channel_indices=None):
+        self.rate = sample_rate
+        self.chunk = chunk_size
         self.p = pyaudio.PyAudio()
 
         device_info = self.p.get_device_info_by_index(device_index)
@@ -857,20 +1267,35 @@ class MonoMicrophoneStream:
 
         self.stream = self.p.open(
             format=pyaudio.paInt16,
-            channels=self.input_channels,
-            rate=sample_rate,
+            channels=self.input_channels, # Use actual input channels
+            rate=self.rate,
             input=True,
             input_device_index=device_index,
-            frames_per_buffer=chunk_size,
+            frames_per_buffer=self.chunk
         )
+        
+        # Audio saving
+        self.wave_file = None
+        Path("sessions").mkdir(exist_ok=True) # Ensure sessions directory exists
+        self.audio_path = f"sessions/audio_{int(time.time())}.wav"
+        try:
+            self.wave_file = wave.open(self.audio_path, 'wb')
+            self.wave_file.setnchannels(1) # We save the mixed mono
+            self.wave_file.setsampwidth(self.p.get_sample_size(pyaudio.paInt16))
+            self.wave_file.setframerate(self.rate)
+            current_session['audio_path'] = self.audio_path
+            logger.info(f"Recording raw audio to: {self.audio_path}")
+        except Exception as e:
+            logger.error(f"Failed to open wav file for recording: {e}")
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        data = self.stream.read(self.chunk_size, exception_on_overflow=False)
+        data = self.stream.read(self.chunk, exception_on_overflow=False)
+        
         audio_data = np.frombuffer(data, dtype=np.int16)
-
+        
         if self.input_channels > 1:
             audio_data = audio_data.reshape(
                 -int(len(audio_data) / self.input_channels), self.input_channels
@@ -908,8 +1333,8 @@ def run_streaming_client():
             # Raw text configuration
             punctuate=True, # Enable punctuation for readability
             format_text=True, # Enable formatting (casing, numbers)
-            speaker_labels=True, # Enable Speaker Diarization
-            # OPTIMIZATION: Provide the exact number of expected speakers (Tutor + Student)
+            # speaker_labels=True, # REMOVED: Ignored in v3 streaming
+            # OPTIMIZATION: We now use post-session batch diarization for accurate speaker labeling
             # This improves diarization accuracy significantly for 1-on-1 sessions.
             # Note: Streaming API uses 'speakers_expected' or similar if available, 
             # but currently v3 streaming setup typically relies on 'speaker_labels=True'.
@@ -966,8 +1391,80 @@ async def main():
     server = await websockets.serve(websocket_handler, "localhost", 8765)
     logger.info("WebSocket server started on ws://localhost:8765")
 
-    streaming_thread = threading.Thread(target=run_streaming_client, daemon=True)
-    streaming_thread.start()
+    # --- Auto-Sync Students from Cloud ---
+    if SUPABASE_AVAILABLE and supabase:
+        try:
+            logger.info("☁️ Syncing students from Supabase...")
+            # We can reuse the logic from sync_students.py but inline it or call a function
+            # For simplicity, let's just call get_existing_students which now checks Supabase
+            # and update the local file if needed.
+            
+            # Actually, let's just run the sync logic here quickly
+            res = supabase.table("students").select("username, first_name").execute()
+            if res.data:
+                cloud_names = []
+                for s in res.data:
+                    name = s.get('first_name') or s.get('username')
+                    if name: cloud_names.append(name)
+                
+                # Merge with local
+                local_names = get_local_existing_students()
+                all_names = sorted(list(set(cloud_names + local_names)))
+                
+                # Save to student_profiles.json
+                with open("student_profiles.json", "w") as f:
+                    json.dump(all_names, f, indent=2)
+                logger.info(f"✅ Synced {len(all_names)} students (Cloud + Local)")
+        except Exception as e:
+            logger.error(f"⚠️ Failed to sync students: {e}")
+
+    # --- INTERACTIVE STUDENT SELECTION ---
+    print("\n" + "="*60)
+    print("🎓 SELECT STUDENT FOR THIS SESSION")
+    print("="*60)
+    
+    students = get_existing_students()
+    if not students:
+        students = ["Unknown", "New Student"]
+    
+    for i, name in enumerate(students):
+        print(f"  [{i+1}] {name}")
+    print(f"  [{len(students)+1}] + Create New / Type Name")
+    
+    selected_student = None
+    while not selected_student:
+        try:
+            choice = input(f"\nEnter number (1-{len(students)+1}) or name: ").strip()
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(students):
+                    selected_student = students[idx]
+                elif idx == len(students):
+                    selected_student = input("Enter new student name: ").strip()
+            else:
+                selected_student = choice
+                
+            if not selected_student:
+                print("❌ Invalid selection. Try again.")
+                selected_student = None # Reset to loop again
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            return
+
+    print(f"\n✅ SELECTED STUDENT: {selected_student}")
+    print("="*60 + "\n")
+    
+    # Update Config & Session
+    config["student_name"] = selected_student
+    current_session["student_name"] = selected_student
+    
+    # Update session filename immediately
+    ts_formatted = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    safe_name = selected_student.replace(" ", "_").lower()
+    current_session["file_path"] = f"sessions/{safe_name}_session_{ts_formatted}.json"
+
+    # Start the stream
+    threading.Thread(target=run_streaming_client, daemon=True).start()
     logger.info("Streaming client started in background thread")
 
     try:

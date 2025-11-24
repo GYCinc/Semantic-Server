@@ -23,5 +23,6 @@
     "auto_export_student": false,
     "student_export_format": "markdown"
   },
-  "app_name": "Semantic Surfer"
+  "app_name": "Semantic Surfer",
+  "student_name": "Unknown"
 }

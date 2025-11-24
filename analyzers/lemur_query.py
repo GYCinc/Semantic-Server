@@ -90,7 +90,7 @@ def run_lemur_query(session_file: Path):
         logger.error(f"LeMUR: API call failed. Check credits and API key validity. Error: {e}")
         sys.exit(1)
 
-def run_lemur_query(session_file: Path) -> Dict[str, Any]:
+def run_lemur_query(session_file: Path, custom_prompt: str = None) -> Dict[str, Any]:
     """
     Loads a session, extracts the student-only text,
     runs the custom LeMUR query, and returns the analysis data.
@@ -119,7 +119,9 @@ def run_lemur_query(session_file: Path) -> Dict[str, Any]:
         logger.error("LeMUR: Could not find student label. Aborting.")
         sys.exit(1)
 
-    if not lemur_prompt:
+    if custom_prompt:
+        lemur_prompt = custom_prompt
+    elif not lemur_prompt:
         logger.error("LeMUR: No custom prompt found in session file. Aborting.")
         sys.exit(1)
 
