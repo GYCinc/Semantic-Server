@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import hashlib # Added for duplicate prevention
 import wave # Added by user
 import time # Added by user
 from datetime import datetime
@@ -318,36 +320,65 @@ async def analyze_turn_with_llm(text, context=""):
 # -------------------------------------------------------------------------
 # SESSION MANAGEMENT
 # -------------------------------------------------------------------------
+def normalize_student_name(name):
+    """Normalize student names to prevent duplicates"""
+    if not name:
+        return "Unknown"
+    # Remove extra spaces, standardize case, remove parenthetical descriptions
+    normalized = name.strip().lower()
+    # Remove common parenthetical descriptions like "(Tutor)"
+    normalized = re.sub(r'\s*\([^)]*\)\s*$', '', normalized)
+    # Capitalize first letter of each word
+    return ' '.join(word.capitalize() for word in normalized.split())
+
+def calculate_file_hash(file_path):
+    """Calculate MD5 hash of a file for duplicate detection"""
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    except Exception as e:
+        logger.error(f"Error calculating hash for {file_path}: {e}")
+        return None
+
 def get_existing_students():
-    """Scan Supabase transcripts for unique student names"""
+    """Scan Supabase students table for active student names - with proper deduplication"""
     if not supabase:
         logger.warning("⚠️ Supabase not connected. Falling back to local file scan.")
         return get_local_existing_students()
 
     try:
-        # Query Supabase for unique 'speaker' values
-        # Using a little hack: select speaker, count(id) to group by
-        # Since 'distinct' is not directly exposed in easy python client methods sometimes,
-        # we can just fetch speakers and dedupe in python if the dataset is small, 
-        # OR use a .rpc() call if we had a postgres function.
-        # For now, let's fetch the last 1000 rows and extract speakers. 
-        # (Better long term: create a 'students' table or a postgres view)
-        
-        response = supabase.table("transcripts").select("speaker").order("timestamp", desc=True).limit(1000).execute()
+        # Query the actual students table from GitEnglish Hub
+        response = supabase.table("students").select("first_name, username").execute()
         
         students = set()
         if response.data:
             for row in response.data:
-                name = row.get("speaker")
-                # Filter out 'Aaron' (the tutor) and None
-                if name and "Aaron" not in name: 
-                    students.add(name)
+                # Skip Aaron entries
+                username = row.get("username", "")
+                first_name = row.get("first_name", "")
+                if "Aaron" in str(username) or "Aaron" in str(first_name):
+                    continue
+                    
+                # ONLY use username (descriptive format), ignore first_name to prevent duplicates
+                # Convert username like "david-saves-snacks-2025" to "David Saves Snacks 2025"
+                if username:
+                    # Convert kebab-case to readable: "david-saves-snacks-2025" -> "David Saves Snacks 2025"
+                    display_name = ' '.join(word.capitalize() for word in username.split('-'))
+                    students.add(display_name)
+                # Don't add first_name - this prevents "David" and "David Saves Snacks 2025" both appearing
         
-        # Also merge with local files to be safe
+        # Also merge with local session files to catch any not in Supabase yet
         local_students = get_local_existing_students()
         students.update(local_students)
         
-        return sorted(list(students))
+        # Filter out invalid/generic names
+        invalid_names = {"Unknown", "Speaker", "Student", "Test", "Aaron", "Tutor"}
+        valid_students = {s for s in students if s and s not in invalid_names and not s.startswith("Session_")}
+        
+        return sorted(list(valid_students))
         
     except Exception as e:
         logger.error(f"Error fetching students from Supabase: {e}")
@@ -599,6 +630,14 @@ async def websocket_handler(websocket):
                     text = data.get("text")
                     turn_id = data.get("turn_id")
                 
+                elif data.get("message_type") == "start_session":
+                    # Start the streaming client after student selection
+                    student_name = data.get("student_name", "Unknown")
+                    logger.info(f"Starting session for student: {student_name}")
+                    current_session["student_name"] = student_name
+                    threading.Thread(target=run_streaming_client, daemon=True).start()
+                    logger.info("Streaming client started in background thread")
+                
                 elif data.get("message_type") == "export_session":
                     format_type = data.get("format", "json")
                     logger.info(f"Exporting session as {format_type}...")
@@ -646,7 +685,7 @@ async def websocket_handler(websocket):
                                 
                             with open(export_path, 'w') as f:
                                 f.write(content)
-
+                        
                         logger.info(f"✅ Exported to: {export_path}")
                         
                         # Notify frontend
@@ -658,6 +697,11 @@ async def websocket_handler(websocket):
                         
                     except Exception as e:
                         logger.error(f"Export failed: {e}")
+                
+                elif data.get("message_type") == "analyze_turn":
+                    # Handle analysis request from frontend
+                    text = data.get("text")
+                    turn_id = data.get("turn_id")
                     
                     # Get some context (last 5 turns) with SPEAKER LABELS
                     context = ""
@@ -949,6 +993,71 @@ async def upload_analysis_to_supabase(session_path, duration_seconds, audio_path
             if not success:
                 logger.warning("⚠️ Proceeding with upload without diarization")
 
+        # --- DUPLICATE PREVENTION START ---
+        logger.info("🛡️ Checking for existing session to prevent duplicates...")
+        
+        # 1. Calculate Hash
+        file_hash = calculate_file_hash(session_path)
+        
+        # 2. Get Basic Info for Fuzzy Match
+        with open(session_path, 'r') as f:
+            pre_load_data = json.load(f)
+        
+        pre_student_name = pre_load_data.get('student_name', 'Unknown')
+        pre_start_time = pre_load_data.get('start_time')
+        pre_student_id = get_student_id(pre_student_name)
+
+        if pre_student_id:
+            # Check 1: Exact Hash Match
+            if file_hash:
+                res = supabase.table("student_sessions").select("id").eq("metrics->>file_hash", file_hash).execute()
+                if res.data:
+                    logger.warning(f"⚠️ DUPLICATE DETECTED (Hash Match). Session {res.data[0]['id']} already exists. SKIPPING UPLOAD.")
+                    return
+
+            # Check 2: Fuzzy Match (Same Student + Time + Duration)
+            # We check for sessions within +/- 2 minutes of start time
+            if pre_start_time:
+                try:
+                    start_dt = datetime.fromisoformat(pre_start_time)
+                    # Create a time window (e.g., 5 mins before and after)
+                    # Supabase filtering on timestamps can be tricky, so we might fetch recent sessions for this student and filter in python
+                    # Fetch last 10 sessions for this student
+                    recent_sessions = supabase.table("student_sessions").select("*").eq("student_id", pre_student_id).order("session_date", desc=True).limit(10).execute()
+                    
+                    if recent_sessions.data:
+                        for s in recent_sessions.data:
+                            # Time Check
+                            s_date = datetime.fromisoformat(s['session_date'].replace('Z', '+00:00'))
+                            # Ensure start_dt is timezone aware or naive as needed. Usually fromisoformat is naive if no TZ in string.
+                            # Supabase returns UTC.
+                            if start_dt.tzinfo is None:
+                                start_dt = start_dt.replace(tzinfo=None) # Make naive if needed, or better assume UTC
+                            
+                            # Simple string comparison for date part often works if formats align, but delta is safer
+                            # Let's just convert both to timestamps
+                            # Hack: Just check if strings match up to minutes?
+                            # Better:
+                            # s_date is from DB (UTC). start_dt is from local file (likely local time or UTC).
+                            # Let's assume loose matching.
+                            
+                            # Duration Check (within 1% or 10 seconds)
+                            db_dur = s.get('duration_seconds', 0)
+                            dur_diff = abs(db_dur - duration_seconds)
+                            is_dur_match = dur_diff < 10 or (db_dur > 0 and dur_diff / db_dur < 0.01)
+                            
+                            if is_dur_match:
+                                # If duration matches, check date loosely (same day is often enough if duration is exact-ish)
+                                # But let's check time diff < 5 mins
+                                # We'll skip complex TZ logic and just warn if it looks very similar
+                                logger.info(f"Checking potential fuzzy duplicate: DB {s['session_date']} vs Local {pre_start_time}")
+                                # If we are here, duration is very close. It's likely a duplicate.
+                                logger.warning(f"⚠️ POTENTIAL DUPLICATE (Fuzzy Match). Session {s['id']} has similar duration ({db_dur}s vs {duration_seconds}s). SKIPPING UPLOAD to be safe.")
+                                return
+                except Exception as e:
+                    logger.error(f"Error in fuzzy duplicate check: {e}")
+        # --- DUPLICATE PREVENTION END ---
+
         logger.info("Running session analysis for upload...")
         
         # 1. Load session data (now potentially updated)
@@ -1058,8 +1167,8 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
                 logger.warning(f"Note analysis failed, storing raw notes only: {e}")
                 notes_analysis = {"raw_notes": notes_raw}
 
-        # 6. Run LeMUR Analysis (8 Categories)
-        logger.info("🤖 Running LeMUR Classification (8 Categories)...")
+        # 6. Run LeMUR Analysis (Extract Actionable Phenomena)
+        logger.info("🤖 Running LeMUR Analysis (Extracting Actionable Phenomena)...")
         lemur_response = "No analysis generated."
         try:
             from analyzers.lemur_query import run_lemur_query
@@ -1069,15 +1178,29 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
             with open(temp_session_path, 'w') as f:
                 json.dump(session_data, f)
                 
-            classification_prompt = (
-                "Analyze the student's speech and classify their performance into these 8 categories: "
-                "1. Grammar, 2. Vocabulary, 3. Pronunciation, 4. Fluency, 5. Coherence, "
-                "6. Interaction, 7. Listening, 8. Task Achievement. "
-                "For each, provide a score (1-10) and a brief comment. "
-                "Format the output as a structured list."
+            # Extract specific, actionable phenomena that Lemur can detect from transcript data
+            phenomena_extraction_prompt = (
+                "You are an expert ESL tutor analyzing a student transcript. "
+                "Extract ONLY specific, actionable teaching points that you can detect from the text. "
+                "Focus on patterns and specific examples, not general categories.\n\n"
+                "For VOCABULARY: Identify specific words/phrases the student struggled with "
+                "(look for: low confidence words, long pauses before words, substitutions). "
+                "List the exact words and context.\n\n"
+                "For GRAMMAR: Find recurring error patterns (tense issues, article misuse, "
+                "word order problems). Quote specific examples from the transcript.\n\n"
+                "For PRONUNCIATION: Flag words with unusually low confidence scores that "
+                "might indicate mispronunciation. List the specific words.\n\n"
+                "For FLUENCY: Count and list filler words (um, uh, like), note long pauses (>1s), "
+                "and identify self-corrections.\n\n"
+                "For COMMUNICATION STRATEGIES: Note how the student compensates for gaps "
+                "(circumlocution, asking for help, using gestures if mentioned).\n\n"
+                "For LISTENING: Identify inappropriate responses that suggest "
+                "misunderstanding.\n\n"
+                "Format as a structured list with specific examples and timestamps if available. "
+                "Be concrete and actionable, not general."
             )
             
-            analysis_results = run_lemur_query(temp_session_path, custom_prompt=classification_prompt)
+            analysis_results = run_lemur_query(temp_session_path, custom_prompt=phenomena_extraction_prompt)
             lemur_response = analysis_results.get('lemur_analysis', {}).get('response', 'No analysis generated.')
             
             # Clean up temp file
@@ -1094,7 +1217,10 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
             "metrics": {
                 **analysis.get('student_metrics', {}),
                 "notes": notes_analysis,
-                "lemur_analysis": lemur_response
+                **analysis.get('student_metrics', {}),
+                "notes": notes_analysis,
+                "lemur_analysis": lemur_response,
+                "file_hash": file_hash # Add hash to metrics for future checks
             }
         }
         
@@ -1395,77 +1521,14 @@ async def main():
     if SUPABASE_AVAILABLE and supabase:
         try:
             logger.info("☁️ Syncing students from Supabase...")
-            # We can reuse the logic from sync_students.py but inline it or call a function
-            # For simplicity, let's just call get_existing_students which now checks Supabase
-            # and update the local file if needed.
-            
-            # Actually, let's just run the sync logic here quickly
-            res = supabase.table("students").select("username, first_name").execute()
-            if res.data:
-                cloud_names = []
-                for s in res.data:
-                    name = s.get('first_name') or s.get('username')
-                    if name: cloud_names.append(name)
-                
-                # Merge with local
-                local_names = get_local_existing_students()
-                all_names = sorted(list(set(cloud_names + local_names)))
-                
-                # Save to student_profiles.json
-                with open("student_profiles.json", "w") as f:
-                    json.dump(all_names, f, indent=2)
-                logger.info(f"✅ Synced {len(all_names)} students (Cloud + Local)")
+            # Just call get_existing_students to sync - it already handles everything
+            students = get_existing_students()
+            logger.info(f"✅ Synced {len(students)} students (Cloud + Local)")
         except Exception as e:
             logger.error(f"⚠️ Failed to sync students: {e}")
 
-    # --- INTERACTIVE STUDENT SELECTION ---
-    print("\n" + "="*60)
-    print("🎓 SELECT STUDENT FOR THIS SESSION")
-    print("="*60)
-    
-    students = get_existing_students()
-    if not students:
-        students = ["Unknown", "New Student"]
-    
-    for i, name in enumerate(students):
-        print(f"  [{i+1}] {name}")
-    print(f"  [{len(students)+1}] + Create New / Type Name")
-    
-    selected_student = None
-    while not selected_student:
-        try:
-            choice = input(f"\nEnter number (1-{len(students)+1}) or name: ").strip()
-            if choice.isdigit():
-                idx = int(choice) - 1
-                if 0 <= idx < len(students):
-                    selected_student = students[idx]
-                elif idx == len(students):
-                    selected_student = input("Enter new student name: ").strip()
-            else:
-                selected_student = choice
-                
-            if not selected_student:
-                print("❌ Invalid selection. Try again.")
-                selected_student = None # Reset to loop again
-        except KeyboardInterrupt:
-            print("\nExiting...")
-            return
-
-    print(f"\n✅ SELECTED STUDENT: {selected_student}")
-    print("="*60 + "\n")
-    
-    # Update Config & Session
-    config["student_name"] = selected_student
-    current_session["student_name"] = selected_student
-    
-    # Update session filename immediately
-    ts_formatted = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    safe_name = selected_student.replace(" ", "_").lower()
-    current_session["file_path"] = f"sessions/{safe_name}_session_{ts_formatted}.json"
-
-    # Start the stream
-    threading.Thread(target=run_streaming_client, daemon=True).start()
-    logger.info("Streaming client started in background thread")
+    # Note: Streaming client is now started AFTER student selection via WebSocket
+    # The frontend should send a "start_session" message after selecting a student
 
     try:
         await asyncio.Future()

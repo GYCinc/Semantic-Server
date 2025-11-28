@@ -749,12 +749,27 @@
                 itemsRef.current = items;
             }, [items]);
 
+            // Ref for studentName to access in WS callbacks without stale closures
+            const studentNameRef = useRef(studentName);
+            useEffect(() => {
+                studentNameRef.current = studentName;
+            }, [studentName]);
+
             // WebSocket Logic
             useEffect(() => {
                 const socket = new WebSocket("ws://localhost:8765");
                 setWs(socket);
 
-                socket.onopen = () => setConnectionStatus("Connected");
+                socket.onopen = () => {
+                    setConnectionStatus("Connected");
+                    // Sync current student name on reconnect
+                    if (studentNameRef.current && studentNameRef.current !== "Unknown") {
+                        socket.send(JSON.stringify({
+                            message_type: "update_profile",
+                            student_name: studentNameRef.current
+                        }));
+                    }
+                };
                 socket.onclose = () => setConnectionStatus("Disconnected");
                 socket.onerror = () => setConnectionStatus("Error");
 
@@ -774,6 +789,14 @@
                             category: prev.category && prev.category !== 'VOCAB_GAP' ? prev.category : data.result.category,
                             detectedTrigger: prev.detectedTrigger
                         }));
+                    } else if (data.message_type === "session_start") {
+                        // Re-sync student name on new session start
+                        if (studentNameRef.current && studentNameRef.current !== "Unknown") {
+                            socket.send(JSON.stringify({
+                                message_type: "update_profile",
+                                student_name: studentNameRef.current
+                            }));
+                        }
                     }
                 };
                 
@@ -789,7 +812,7 @@
                             liveList.push({ 
                                 id: 'temp-' + Date.now(), 
                                 text: text + "...", 
-                                isPartial: true,
+                                isPartial: true, 
                                 speaker: null 
                             });
                         }
