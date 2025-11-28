@@ -24,6 +24,10 @@ npm-debug.log*
 .vscode/
 .idea/
 
-# Session Data (Optional - un-comment to ignore local session files)
-# sessions/
 
+# Session Data - ignore local session files and audio recordings
+sessions/
+*.wav
+*.mp3
+*.flac
+*.m4a
