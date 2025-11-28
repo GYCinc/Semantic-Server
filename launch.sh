@@ -20,8 +20,20 @@ fi
 # Check which python we are using
 which python3
 
+# Check for .env file
+if [ ! -f ".env" ]; then
+    echo "Error: .env file not found. Please create one with ASSEMBLYAI_API_KEY."
+    exit 1
+fi
+
 # Ensure .env variables are loaded
 export $(cat .env | xargs)
+
+# Check for node_modules
+if [ ! -d "node_modules" ]; then
+    echo "Error: node_modules not found. Please run 'npm install'."
+    exit 1
+fi
 
 # --- 3. LAUNCH PYTHON BACKEND ---
 echo "Starting Python Backend..."
