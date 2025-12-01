@@ -11,15 +11,14 @@ def run():
         print(f"Loading {url}")
         page.goto(url)
 
-        # Wait for React to mount and the header to appear
-        # The header has "Project Sentinel Dashboard"
-        page.wait_for_selector("text=Project Sentinel Dashboard")
+        # Wait for the new H1 title
+        page.wait_for_selector("text=SEMANTIC SURFER")
 
-        # Wait a bit for animations
-        page.wait_for_timeout(1000)
+        # Wait a bit for the background animation to start
+        page.wait_for_timeout(2000)
 
         # Take screenshot
-        output_path = "verification_screenshot.png"
+        output_path = "verification_screenshot_glass.png"
         page.screenshot(path=output_path, full_page=True)
         print(f"Screenshot saved to {output_path}")
 
