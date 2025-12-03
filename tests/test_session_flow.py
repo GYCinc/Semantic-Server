@@ -230,9 +230,10 @@ class TestIntraSessionAsync(unittest.IsolatedAsyncioTestCase):
 
         # Mock tool call response
         tool_call_args = {
-            "category": "GRAMMAR_ERR",
+            "category": "Grammar",
             "suggestedCorrection": "Corrected text",
-            "explanation": "Explanation"
+            "explanation": "Explanation",
+            "detected_trigger": None
         }
 
         mock_response.json.return_value = {
@@ -273,7 +274,7 @@ class TestIntraSessionAsync(unittest.IsolatedAsyncioTestCase):
 
         result = await analyze_turn_with_llm("test text")
 
-        self.assertEqual(result["category"], "NONE")
+        self.assertEqual(result["category"], "Flow")
 
 
 class TestPostSession(unittest.TestCase):

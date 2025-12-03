@@ -93,7 +93,7 @@ class MaterialAgent:
                         # --- PETTY DANTIC VALIDATION ---
                         # Validate against our Pydantic schema
                         feedback = LanguageFeedback(**args)
-                        return feedback.model_dump(by_alias=True)
+                        return feedback.model_dump(mode='json', by_alias=True)
                     else:
                         return {"category": "Flow", "suggestedCorrection": text, "explanation": "No specific feedback generated."}
 

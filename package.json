@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@sanity/client": "^7.13.0",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "tailwind": "^4.0.0"
   }
 }
