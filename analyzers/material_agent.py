@@ -1,106 +1,98 @@
+import asyncio
+import os
 import json
 import logging
-import os
-import httpx
-from schemas import AnalysisCategory, LanguageFeedback
-from dotenv import load_dotenv
+from typing import Optional
+import openai
+from schemas import LanguageFeedback, AnalysisCategory
 
-load_dotenv()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("MaterialAgent")
 
 class MaterialAgent:
-    """
-    The MaterialAgent is responsible for:
-    1. Analyzing student turns using the LLM Gateway.
-    2. Enforcing the 'Immutable 8 Categories' via Pydantic (Petty Dantic).
-    3. Returning structured, validated data for the frontend.
-    """
-
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.gateway_url = "https://llm-gateway.assemblyai.com/v1/chat/completions"
-
-    async def analyze_turn(self, text: str, context: str = "") -> dict:
-        """
-        Analyzes a turn and returns a dictionary matching the LanguageFeedback schema.
-        """
+    def __init__(self):
+        self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            return {"error": "Missing API Key"}
+            logger.warning("OPENAI_API_KEY not found. Analysis will fail silently.")
+        else:
+            openai.api_key = self.api_key
 
-        # Define the tool for the LLM
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "submit_language_feedback",
-                    "description": "Submit structured feedback for a language learner.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "category": {
-                                "type": "string",
-                                "enum": [e.value for e in AnalysisCategory],
-                                "description": "The category of the linguistic issue."
-                            },
-                            "suggestedCorrection": {
-                                "type": "string",
-                                "description": "The natural, corrected version of the sentence."
-                            },
-                            "explanation": {
-                                "type": "string",
-                                "description": "A concise explanation of the error (max 2 sentences)."
-                            },
-                            "detectedTrigger": {
-                                "type": "string",
-                                "description": "The specific text that caused the issue."
-                            }
-                        },
-                        "required": ["category", "suggestedCorrection", "explanation"]
-                    }
-                }
-            }
-        ]
+        self.system_prompt = """
+You are an expert ESL linguistic analyst assisting a tutor in real-time.
+Your goal is to identify ONE critical linguistic improvement in the student's speech.
+Focus on these categories: Phrasal Verbs, Vocabulary, Expressions, Grammar, Pronunciation, Flow, Discourse, Sociolinguistics.
 
-        payload = {
-            "model": "claude-3-5-haiku-20241022",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an expert ESL tutor. Analyze the last user utterance given the context. Use the 'submit_language_feedback' tool to provide your analysis. If there are no issues, use category 'Flow' or 'Vocabulary' to give positive reinforcement or return nothing."
-                },
-                {
-                    "role": "user",
-                    "content": f"Context:\n{context}\n\nStudent Utterance: \"{text}\""
-                }
-            ],
-            "max_tokens": 1000,
-            "tools": tools,
-            "tool_choice": {"type": "function", "function": {"name": "submit_language_feedback"}}
-        }
+Output valid JSON matching this schema:
+{
+  "category": "Grammar",
+  "suggestedCorrection": "Corrected sentence here.",
+  "explanation": "Brief explanation of why.",
+  "detected_trigger": "The phrase that triggered this."
+}
+
+If the speech is correct or trivial (e.g. "Yes", "Hello"), return null or an empty object.
+Avoid nitpicking. Focus on intermediate/advanced errors or improvements.
+"""
+
+    async def analyze(self, text: str) -> Optional[LanguageFeedback]:
+        """
+        Analyzes the text using an LLM to produce structured feedback.
+        """
+        if not self.api_key or len(text.split()) < 3:
+            return None
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(self.gateway_url, headers={"authorization": self.api_key, "content-type": "application/json"}, json=payload, timeout=15.0)
-                response.raise_for_status()
-                result = response.json()
+            # We use a synchronous call wrapped in a thread for now, or async client if available.
+            # For simplicity in this environment, we'll use the synchronous client but executed efficiently.
+            # Note: In a production async loop, use AsyncOpenAI client.
 
-                try:
-                    choice = result["choices"][0]
-                    if choice["message"].get("tool_calls"):
-                        tool_call = choice["message"]["tool_calls"][0]
-                        args = json.loads(tool_call["function"]["arguments"])
+            # Mocking the interaction for this environment if no API key is valid,
+            # but assuming the user might have one.
+            # If not, we can implement a basic keyword matcher for testing.
 
-                        # --- PETTY DANTIC VALIDATION ---
-                        # Validate against our Pydantic schema
-                        feedback = LanguageFeedback(**args)
-                        return feedback.model_dump(by_alias=True)
-                    else:
-                        return {"category": "Flow", "suggestedCorrection": text, "explanation": "No specific feedback generated."}
+            # For this task, we will implement a mock logic if OPENAI_API_KEY is unset,
+            # so the UI can be tested.
+            if self.api_key == "mock":
+                return self._mock_analysis(text)
 
-                except Exception as e:
-                    logger.error(f"Validation or Parsing Error: {e}")
-                    return {"error": "Analysis failed validation"}
+            response = await asyncio.to_thread(
+                openai.chat.completions.create,
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                temperature=0.3,
+                max_tokens=150,
+                response_format={ "type": "json_object" }
+            )
+
+            content = response.choices[0].message.content
+            if not content: return None
+
+            data = json.loads(content)
+            if not data or not data.get("category"): return None
+
+            return LanguageFeedback(**data)
 
         except Exception as e:
-            logger.error(f"LLM Gateway Error: {e}")
-            return {"error": str(e)}
+            logger.error(f"Analysis failed: {e}")
+            return None
+
+    def _mock_analysis(self, text: str) -> Optional[LanguageFeedback]:
+        """A simple keyword-based mock for testing/demo purposes."""
+        lower = text.lower()
+        if "gonna" in lower:
+            return LanguageFeedback(
+                category=AnalysisCategory.SOCIOLINGUISTICS,
+                suggestedCorrection=text.replace("gonna", "going to"),
+                explanation="In formal contexts, 'going to' is preferred over 'gonna'.",
+                detected_trigger="gonna"
+            )
+        if "she don't" in lower:
+             return LanguageFeedback(
+                category=AnalysisCategory.GRAMMAR,
+                suggestedCorrection=text.replace("don't", "doesn't"),
+                explanation="Third-person singular requires 'doesn't'.",
+                detected_trigger="she don't"
+            )
+        return None
