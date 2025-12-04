@@ -8,3 +8,4 @@ httpx
 textblob
 supabase
 pydantic
+openai
