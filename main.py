@@ -371,6 +371,14 @@ def save_turn_to_session(event: TurnEvent):
     words_data = []
     pauses = []
 
+
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ textblob not available. POS tagging disabled.")
+    TEXTBLOB_AVAILABLE = False
+
     if hasattr(event, "words") and event.words:
         for i, word in enumerate(event.words):
             word_data = {
@@ -872,7 +880,8 @@ async def perform_batch_diarization(audio_path, session_path):
             speaker_labels=True,
             speakers_expected=2, # Tutor + Student
             punctuate=True,
-            format_text=True
+            format_text=True,
+            speech_model=aai.SpeechModel.best # Use highest accuracy model (e.g. SLAM-1)
         )
         
         transcript = await transcriber.transcribe_async(audio_path, config)
@@ -899,35 +908,38 @@ async def perform_batch_diarization(audio_path, session_path):
         # OR better: Replace the text with the high-quality batch transcript?
         # NO, we want to keep the real-time analysis metadata.
         
-        # Let's just update the speaker labels for now.
-        # We'll use a time-overlap matching.
+        # Map speakers: Default A=Tutor (Aaron), B=Student
+        # This is crucial for the Corpus Filter to work later.
+        tutor_name = config.get("speaker_name", "Aaron")
+        student_name = session_data.get("student_name", "Student")
         
-        batch_utterances = transcript.utterances
-        
-        for turn in session_data['turns']:
-            # Find matching utterance in batch
-            # Turn has 'created' (ISO timestamp). We need relative time.
-            # This is hard without relative offsets.
-            # FALLBACK: Just trust the batch transcript for the final record?
-            # YES. The batch transcript is the source of truth for the database.
-            pass
+        session_data["diarized_turns"] = []
+        for u in batch_utterances:
+            spk = u.speaker
+            if spk == "A":
+                spk = tutor_name
+            elif spk == "B":
+                spk = student_name
+            
+            # Extract words with milliseconds for corpus
+            words_list = []
+            for w in u.words:
+                words_list.append({
+                    "text": w.text,
+                    "start_ms": w.start,
+                    "end_ms": w.end,
+                    "confidence": w.confidence,
+                    "duration_ms": w.end - w.start
+                })
 
-        # ACTUALLY: The most robust way is to use the BATCH transcript as the "Corpus" source
-        # and just attach the analysis metadata from the streaming session to it.
-        
-        # For now, let's just save the diarized transcript as a separate file or update the session
-        # with a "diarized_turns" field.
-        
-        session_data['diarized_turns'] = [
-            {
-                "speaker": u.speaker,
+            session_data["diarized_turns"].append({
+                "speaker": spk,
                 "text": u.text,
                 "start": u.start,
                 "end": u.end,
-                "confidence": u.confidence
-            }
-            for u in batch_utterances
-        ]
+                "confidence": u.confidence,
+                "words": words_list
+            })
         
         # Update the main turns if possible, or just save this
         with open(session_path, 'w') as f:
@@ -1468,21 +1480,10 @@ def run_streaming_client():
             # Raw text configuration
             punctuate=False, # DISABLED for ESL accuracy
             format_text=False, # DISABLED for ESL accuracy
-            # speaker_labels=True, # REMOVED: Ignored in v3 streaming
-            # OPTIMIZATION: We now use post-session batch diarization for accurate speaker labeling
-            # This improves diarization accuracy significantly for 1-on-1 sessions.
-            # Note: Streaming API uses 'speakers_expected' or similar if available, 
-            # but currently v3 streaming setup typically relies on 'speaker_labels=True'.
-            # We will check if 'speakers_expected' is a valid param for StreamingParameters.
-            # If not, we rely on the improved model. 
-            # The docs mention 'speakers_expected' for TranscriptionConfig (batch), 
-            # but for Streaming, it's often auto-detected.
-            # However, we can enforce conservative confidence thresholds.
-            
-            # CONSERVATIVE TURN DETECTION SETTINGS
+            # CONSERVATIVE TURN DETECTION SETTINGS (Golden Settings)
             end_of_turn_confidence_threshold=0.7,
-            min_end_of_turn_silence_when_confident=800,
-            max_turn_silence=3600,
+            min_end_of_turn_silence_when_confident=160,
+            max_turn_silence=2400,
         )
     )
 
