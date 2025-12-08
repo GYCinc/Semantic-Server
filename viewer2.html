@@ -3,8 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Semantic Surfer - Crimson Glass</title>
-    <!-- Tailwind CSS (via CDN for runtime speed) -->
-    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React & ReactDOM (via CDN) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -16,347 +14,18 @@
     <!-- Framer Motion -->
     <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:wght,FILL@300,1&amp;display=swap" rel="stylesheet"/>
 
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000;
-            font-family: 'Inter', sans-serif;
-            color: #e5e5e5;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.4);
-        }
-
-        /* Glass Utilities */
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        }
-
-        .glass-input {
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            transition: all 0.2s ease;
-        }
-        .glass-input:focus {
-            outline: none;
-            border-color: rgba(220, 38, 38, 0.5); /* Red-600 */
-            background: rgba(0, 0, 0, 0.8);
-        }
-
-        /* Animation utilities */
-        .fade-enter { opacity: 0; transform: translateY(10px); }
-        .fade-enter-active { opacity: 1; transform: translateY(0); transition: opacity 300ms, transform 300ms; }
-
-        /* Loading Spinner */
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-radius: 50%;
-            border-top-color: #ef4444; /* Red-500 */
-            animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        #root {
-            width: 100vw;
-            height: 100vh;
-        }
-
-        /* Selection Highlight */
-        ::selection {
-            background: rgba(239, 68, 68, 0.3);
-            color: white;
-        }
-    </style>
-</head>
-<body>
-    <!-- Fallback Loading Overlay (Removed by React on Mount) -->
-    <div id="loading-overlay" style="position:fixed; inset:0; background:#000; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
-        <div class="spinner"></div>
-        <p style="margin-top:20px; font-family:'Inter',sans-serif; opacity:0.7;">Initializing Crimson Glass...</p>
-    </div>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Semantic Surfer - Crimson Glass</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    
-    <!-- Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Tailwind -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        crimson: {
-                            950: '#1a0505',
-                            900: '#2d0a0a',
-                            800: '#4a0e0e',
-                            700: '#6d1414',
-                            600: '#9b1c1c',
-                            500: '#c52828',
-                        }
-                    },
-                    backdropBlur: {
-                        xs: '2px',
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- Framer Motion -->
-    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
-        body {
-            background-color: #000000;
-            color: #ffffff;
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            margin: 0;
-            padding: 0;
-            /* Deep Crimson Glass Gradient */
-            background: radial-gradient(circle at 50% -20%, #5a1010 0%, #2d0a0a 45%, #050101 100%);
+    <style type="text/tailwindcss">
+        @layer base {
+            html { font-family: "Google Sans Flex", -apple-system, sans-serif; }
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.2);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(197, 40, 40, 0.3);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(197, 40, 40, 0.5);
-        }
-
-        /* Loading Overlay */
-        #loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: #000000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.5s ease-out;
-        }
-        .loader {
-            width: 48px;
-            height: 48px;
-            border: 3px solid rgba(197, 40, 40, 0.3);
-            border-radius: 50%;
-            display: inline-block;
-            position: relative;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
-        }
-        .loader::after {
-            content: '';  
-            box-sizing: border-box;
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: 3px solid transparent;
-            border-bottom-color: #c52828;
-            animation: rotation 0.8s linear infinite reverse;
-        }
-        @keyframes rotation {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .glass-panel {
-            background: rgba(10, 5, 5, 0.4);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-        }
-
-        .glass-button {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.2s ease;
-        }
-        .glass-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-        
-        /* Neomorphic-style drop shadow for depth */
-        .neo-shadow {
-            box-shadow: 5px 5px 10px rgba(0,0,0,0.5), -5px -5px 10px rgba(255,255,255,0.02);
-        }
-    </style>
-</head>
-<body>
-    <div id="loading-overlay">
-        <span class="loader"></span>
-    </div>
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
-        const { motion, AnimatePresence } = window.Motion;
-
-        // --- Icons ---
-        const Icon = ({ name, size = 20, className = "" }) => {
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            }, [name]);
-            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
-        };
-
-        // --- Components ---
-
-        const GlassCard = ({ children, className = "" }) => (
-            <div className={`glass-panel rounded-3xl p-6 ${className}`}>
-                {children}
-            </div>
-        );
-
-        const IconButton = ({ icon, onClick, active = false }) => (
-            <button 
-                onClick={onClick}
-                className={`glass-button p-3 rounded-full ${active ? 'bg-white/10 border-white/30' : ''}`}
-            >
-                <Icon name={icon} size={20} />
-            </button>
-        );
-
-        // Custom Dropdown to replace native select
-        const CustomDropdown = ({ options, value, onChange, placeholder = "Select..." }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            const dropdownRef = useRef(null);
-
-            useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                        setIsOpen(false);
-                    }
-                };
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, []);
-
-            return (
-                <div className="relative w-64 z-50" ref={dropdownRef}>
-                    <button 
-                        onClick={() => setIsOpen(!isOpen)}
-                        className="w-full flex items-center justify-between glass-button px-4 py-2 rounded-xl text-sm font-medium text-white/90 hover:bg-white/10 transition-colors neo-shadow"
-                    >
-                        <span>{value || placeholder}</span>
-                        <Icon name="chevron-down" size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    <AnimatePresence>
-                        {isOpen && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                className="absolute top-full left-0 right-0 mt-2 glass-panel rounded-xl overflow-hidden max-h-60 overflow-y-auto neo-shadow"
-                            >
-                                {options.length === 0 ? (
-                                    <div className="px-4 py-3 text-white/40 text-sm">No students found</div>
-                                ) : (
-                                    options.map((opt) => (
-                                        <div 
-                                            key={opt}
-                                            onClick={() => {
-                                                onChange(opt);
-                                                setIsOpen(false);
-                                            }}
-                                            className={`px-4 py-2.5 text-sm cursor-pointer hover:bg-crimson-500/20 hover:text-white transition-colors ${value === opt ? 'bg-crimson-500/10 text-crimson-200' : 'text-white/70'}`}
-                                        >
-                                            {opt}
-                                        </div>
-                                    ))
-                                )}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-            );
-        };
-
-        const LiquidVisualizer = ({ isListening, intensity = 0 }) => {
-            return (
-                <div className="h-48 flex items-center justify-center">
-                    {isListening ? (
-                        <div className="flex gap-1.5 items-center h-full">
-                            {[...Array(7)].map((_, i) => (
-                                <motion.div
-                                    key={i}
-                                    className="w-2 bg-gradient-to-t from-crimson-600 to-crimson-400 rounded-full"
-                                    animate={{
-                                        height: [20, 30 + (Math.random() * 50 * (intensity + 0.5)), 20],
-                                        opacity: [0.6, 1, 0.6]
-                                    }}
-                                    transition={{
-                                        duration: 0.4,
-                                        repeat: Infinity,
-                                        delay: i * 0.05,
-                                        ease: "easeInOut"
-                                    }}
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center gap-4 text-white/30">
-                             <div className="flex gap-2 opacity-50">
-                                {[...Array(3)].map((_, i) => (
-                                    <div key={i} className="w-1.5 h-8 bg-white/10 rounded-full" />
-                                ))}
-                             </div>
-                             <span className="text-xs font-medium tracking-[0.2em] uppercase">Ready to Start</span>
-                        </div>
-                    )}
-                </div>
         /* --- CRIMSON GLASS THEME --- */
         :root {
             --glass-surface: rgba(255, 255, 255, 0.05);
@@ -458,6 +127,27 @@
             border-color: rgba(255,255,255,0.2);
             transform: translateY(-1px);
         }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <span class="loader"></span>
+    </div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // --- Icons ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        // --- Components ---
 
         .drop .options {
             position: absolute; top: 110%; left: 0; width: 100%; min-width: 200px;
@@ -808,48 +498,49 @@
             );
         };
 
-        // Individual Word Component for Interaction
-        const InteractiveWord = ({ word, onMark }) => {
-            return (
-                <motion.span
-                    className="inline-block cursor-pointer px-0.5 rounded hover:bg-white/10 hover:text-crimson-200 transition-colors mr-1"
-                    whileHover={{ scale: 1.15, y: -2 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onMark(word);
-                    }}
-                >
-                    {word}
-                </motion.span>
-            );
-        };
+        function LiquidDropdown({ options, value, onChange, placeholder = "Select..." }) {
+            const [isOpen, setIsOpen] = useState(false);
+            const dropdownRef = useRef(null);
 
-        const TranscriptItem = ({ speaker, text, onMark, isPartial = false }) => {
-            // Split text into words for interaction
-            const words = useMemo(() => text.split(/\s+/), [text]);
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsOpen(false);
+                    }
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
 
             return (
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`mb-6 ${isPartial ? 'opacity-70' : ''}`}
+                <div
+                    ref={dropdownRef}
+                    className={`drop ${isOpen ? 'liquid' : ''}`}
+                    onClick={() => setIsOpen(!isOpen)}
                 >
-                    <div className="flex items-baseline gap-2 mb-2">
-                        <span className={`text-[10px] font-bold tracking-wider uppercase ${speaker === 'Aaron' ? 'text-crimson-400' : 'text-blue-400'}`}>
-                            {speaker || 'Speaker'}
-                        </span>
-                        <span className="text-[10px] text-white/20 font-mono">
-                            {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
+                    <div className="label group">
+                        <span className="material-symbols-rounded text-base text-white/70">person</span>
+                        <span className="text-neo">{value === "Unknown" ? placeholder : value}</span>
+                        <span className="material-symbols-rounded text-sm ml-auto opacity-50 group-hover:translate-y-0.5 transition-transform">expand_more</span>
                     </div>
-                    <p className="text-lg leading-relaxed text-white/90 font-light">
-                        {words.map((word, i) => (
-                            <InteractiveWord key={i} word={word} onMark={onMark} />
+                    <div className="options">
+                        <div className="text-[9px] uppercase tracking-widest text-white/20 px-3 py-2 font-bold">Available Profiles</div>
+                        {options.map((opt) => (
+                            <div
+                                key={opt}
+                                className="option-item flex items-center gap-2"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onChange(opt);
+                                    setIsOpen(false);
+                                }}
+                            >
+                                <div className="w-1.5 h-1.5 rounded-full bg-white/20"></div>
+                                {opt}
+                            </div>
                         ))}
-                    </p>
-                </motion.div>
+                    </div>
+                </div>
             );
         };
 
@@ -890,6 +581,10 @@
             );
         };
 
+        function ChatBubble({ turn, isPartial, onClick }) {
+            const isTutor = turn.speaker && (turn.speaker === 'Aaron' || turn.speaker === 'A');
+            const springConfig = { type: "spring", stiffness: 400, damping: 25 };
+
             return (
                 <motion.div 
                     initial={{ opacity: 0, y: 30, scale: 0.95 }}
@@ -920,351 +615,106 @@
                         </p>
                     </div>
 
-                    {/* Interactive Line Container */}
-                    <div
-                        className="pl-4 border-l-2 border-white/10 group-hover:border-red-500/50 transition-colors duration-300 cursor-pointer hover:bg-white/5 rounded-r-lg p-2 -ml-2"
-                        onClick={() => onLineClick(turn)}
-                        title="Click to copy full line"
-                    >
-                        <p className="text-lg leading-relaxed text-white/90">
-                            {turn.words && turn.words.length > 0 ? (
-                                turn.words.map((w, i) => (
-                                    <TranscriptWord key={i} word={w} onClick={() => onWordClick(w, turn)} />
-                                ))
-                            ) : (
-                                <span>{turn.text}</span>
-                            )}
-                        </p>
+        function MarkCard({ task, index }) {
+            return (
+                <motion.div
+                    initial={{ opacity: 0, x: 50, filter: 'blur(10px)' }}
+                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+                    transition={{ delay: index * 0.05, type: "spring" }}
+                    className="glass-panel p-4 mb-3 rounded-2xl border-l-4 border-l-orange-500 relative group hover:bg-white/5 transition-colors"
+                >
+                    <div className="flex justify-between items-start mb-2">
+                        <span className="text-[9px] font-bold text-orange-400 uppercase tracking-[0.2em] bg-orange-900/20 px-2 py-1 rounded">{task.category}</span>
                     </div>
+                    <p className="text-sm text-white/90 leading-relaxed font-light mt-1">{task.text}</p>
                 </motion.div>
             );
-        };
+        }
 
-        // --- MAIN APP ---
-        const App = () => {
-            const [status, setStatus] = useState("Connecting...");
-            const [ws, setWs] = useState(null); // Lift ws into state
-            const [session, setSession] = useState({ turns: [], notes: "", student_name: "Unknown", wpm: 0 });
-            const [students, setStudents] = useState([]);
-            const [markedNotes, setMarkedNotes] = useState([]);
+        function Dashboard() {
+            const { turns, activeTurn, actionableTasks, addTask } = useContext(StudentContext);
+            const scrollRef = useRef(null);
+            const [autoScroll, setAutoScroll] = useState(true);
 
-            // Ref for auto-scrolling
-            const transcriptEndRef = useRef(null);
-
-            // Remove initial loader on mount
-            useEffect(() => {
-                const loader = document.getElementById('loading-overlay');
-                if (loader) loader.style.display = 'none';
-            }, []);
-
-            // Scroll to bottom when turns change
-            useEffect(() => {
-                transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [session.turns]);
+            const handleScroll = () => {
+                if (scrollRef.current) {
+                    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+                    setAutoScroll(isNearBottom);
+                }
+            };
 
             // WebSocket Connection
             useEffect(() => {
-                const socket = new WebSocket("ws://localhost:8765");
-
-                socket.onopen = () => {
-                    setStatus("Online");
-                    setWs(socket); // Set ws state
-                };
-                    setStatus("Online");
-                    setWs(socket);
-                };
-
-                socket.onclose = () => setStatus("Disconnected");
-
-                socket.onmessage = (event) => {
-                    try {
-                        const msg = JSON.parse(event.data);
-                        handleMessage(msg);
-                    } catch (e) {
-                        console.error("Parse error:", e);
-                    }
-                };
-
-                return () => socket.close();
-            }, []);
-
-            const handleMessage = (msg) => {
-                if (msg.message_type === "student_list") {
-                    setStudents(msg.students.map(s => ({ value: s, label: s })));
-                } else if (msg.message_type === "transcript") {
-                    setSession(prev => ({
-                        ...prev,
-                        turns: [...prev.turns, { ...msg, words: msg.words || [] }], // Ensure words array exists
-                        wpm: msg.speaking_rate_wpm || prev.wpm
-                    }));
-                } else if (msg.message_type === "partial") {
-                    // Optional: Handle partials if you want real-time text updating before final
+                if (autoScroll && scrollRef.current) {
+                    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
                 }
-            };
+            }, [turns, activeTurn, autoScroll]);
 
-            const handleWordClick = (word, turn) => {
-                // Copy to clipboard
-                navigator.clipboard.writeText(word.text).catch(err => console.error("Clipboard copy failed:", err));
-
-                // Add to marked notes
-                const note = {
-                    id: Date.now(),
-                    text: word.text,
-                    context: turn.text,
-                    timestamp: new Date().toLocaleTimeString(),
-                    type: 'vocabulary' // Default type
-                };
-                setMarkedNotes(prev => [note, ...prev]);
-
-                // Send to backend
-                if (ws) {
-                    ws.send(JSON.stringify({
-                        message_type: "mark_update",
-                        turn_order: turn.turn_order,
-                        mark_type: "vocabulary", // Can be customized
-                        timestamp: new Date().toISOString()
-                    }));
-                }
-            };
-
-            const handleLineClick = (turn) => {
-                const fullText = turn.words ? turn.words.map(w => w.text).join(' ') : turn.text;
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        message_type: 'update_notes', // Leveraging existing note saving or create new type
-                        message_type: "update_notes",
-                        notes: turn.text,
-                        context: turn.context,
-                        timestamp: turn.timestamp
-                    }));
-                    
-                    // Also send a mark update for the session log
-                    ws.send(JSON.stringify({
-                        message_type: 'mark_update',
-                        mark_type: 'vocabulary', // Defaulting to vocabulary for now
-                        text: text,
-                        timestamp: turn.timestamp
-                    }));
-                }
+            const handleBubbleClick = (text) => {
+                navigator.clipboard.writeText(text);
+                addTask(text);
             };
 
             return (
-                <div className="h-screen w-screen p-6 flex flex-col gap-6 select-none">
-                    {/* Header */}
-                    <div className="flex justify-between items-center glass-panel rounded-2xl p-4 relative z-10">
-                        <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                                <h1 className="text-xl font-bold tracking-wide uppercase text-white bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-                                    Semantic Surfer
-                                </h1>
-                                <span className="text-[10px] text-crimson-400 font-mono tracking-widest">CRIMSON GLASS v2.1</span>
-                            </div>
-
-                            <div className="h-8 w-px bg-white/10 mx-2"></div>
-                            
-                            <div className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase border ${status === 'listening' ? 'bg-red-500/10 border-red-500/30 text-red-400 animate-pulse' : (status === 'connected' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-500/10 border-gray-500/30 text-gray-400')}`}>
-                                {status === 'listening' ? 'LIVE RECORDING' : status}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                            <CustomDropdown 
-                                options={students} 
-                                value={selectedStudent} 
-                                onChange={handleStudentChange} 
-                                placeholder="Select Student..."
-                            />
-
-                // Copy to clipboard
-                navigator.clipboard.writeText(fullText).catch(err => console.error("Clipboard copy failed:", err));
-
-                // Add to marked notes as "Expression" or "Sentence"
-                const note = {
-                    id: Date.now(),
-                    text: fullText,
-                    context: "Full Line",
-                    timestamp: new Date().toLocaleTimeString(),
-                    type: 'expression'
-                };
-                setMarkedNotes(prev => [note, ...prev]);
-
-                if (ws) {
-                    ws.send(JSON.stringify({
-                        message_type: "mark_update",
-                        turn_order: turn.turn_order,
-                        mark_type: "expression",
-                        timestamp: new Date().toISOString()
-                    }));
-                }
-            };
-
-            const handleStudentChange = (name) => {
-                setSession(prev => ({ ...prev, student_name: name }));
-                if (ws) {
-                    ws.send(JSON.stringify({
-                        message_type: "start_session",
-                        student_name: name
-                    }));
-                }
-            };
-
-            return (
-                <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-[#450a0a] via-[#991b1b] to-[#450a0a] text-white font-sans">
-
-                    {/* LEFT: Transcript Area */}
-                    <div className="flex-1 flex flex-col relative z-10">
-                        {/* Header (Higher Z-Index to overlap Sidebar if needed) */}
-                        <header className="relative z-30 h-16 flex items-center justify-between px-6 border-b border-white/10 backdrop-blur-md bg-black/20 select-none" style={{ WebkitAppRegion: "drag" }}>
-                            <div className="flex items-center space-x-4">
-                                <div className={`w-2 h-2 rounded-full ${status === 'Online' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`} />
-                                <h1 className="text-lg font-bold tracking-tight text-white/90">SEMANTIC SURFER</h1>
-                            </div>
-
-                            <div className="flex items-center space-x-6" style={{ WebkitAppRegion: "no-drag" }}>
-                                {/* WPM Indicator */}
-                                <div className="flex flex-col items-end">
-                                    <span className="text-xs text-white/50 uppercase tracking-wider">Pace</span>
-                                    <span className="text-sm font-mono font-bold text-red-400">{session.wpm ? Math.round(session.wpm) : '--'} <span className="text-xs text-white/30">WPM</span></span>
-                    {/* Main Content Grid */}
-                    <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
-                        
-                        {/* LEFT: Live Audio/Transcript (7 cols) */}
-                        <GlassCard className="col-span-8 flex flex-col relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-gradient-to-b from-crimson-900/10 to-transparent pointer-events-none" />
-                            
-                            {/* Visualizer */}
-                            <div className="flex-shrink-0 mb-4 border-b border-white/5 pb-4">
-                                <LiquidVisualizer isListening={status === 'listening'} intensity={currentTranscript.length > 0 ? 1 : 0} />
-                            </div>
-
-                            {/* Transcript Area */}
-                            <div className="flex-1 overflow-y-auto pr-2 relative" ref={scrollRef}>
-                                <div className="space-y-2">
-                                    {transcripts.length === 0 && !currentTranscript && (
-                                        <div className="h-full flex flex-col items-center justify-center text-white/20">
-                                            <Icon name="mic" size={32} className="mb-4 opacity-50" />
-                                            <p className="text-sm">Select a student to begin session</p>
-                                        </div>
-                                    )}
-                                    
-                                    {transcripts.map((t, i) => (
-                                        <TranscriptItem key={i} speaker={t.speaker} text={t.text} onMark={handleMark} />
-                                    ))}
-                                    
-                                    {currentTranscript && (
-                                        <TranscriptItem speaker="..." text={currentTranscript} onMark={handleMark} isPartial={true} />
-                                    )}
+                <main className="flex-grow flex overflow-hidden px-8 pb-8 gap-8">
+                    {/* LEFT: CHAT (70%) */}
+                    <section className="flex-[3] glass-panel-heavy rounded-[2.5rem] flex flex-col relative overflow-hidden">
+                        <div
+                            className="flex-1 overflow-y-auto p-8 scrollbar-hide"
+                            ref={scrollRef}
+                            onScroll={handleScroll}
+                        >
+                            {turns.length === 0 && !activeTurn && (
+                                <div className="h-full flex flex-col items-center justify-center opacity-40">
+                                    <div className="w-24 h-24 rounded-full border border-dashed border-white/20 flex items-center justify-center animate-spin-slow">
+                                        <span className="material-symbols-rounded text-5xl text-white">graphic_eq</span>
+                                    </div>
                                 </div>
-
-                                {/* Student Selector */}
-                                <GlassDropdown
-                                    options={[{value: 'New Student', label: '+ New Student'}, ...students]}
-                                    value={session.student_name}
-                                    onChange={handleStudentChange}
-                                    placeholder="Select Student"
-                                />
-                                
-                                <button className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Settings">
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                </button>
-
-                                {/* End Session Button (New) */}
-                                <button
-                                    onClick={() => {
-                                        if (ws) ws.send(JSON.stringify({ message_type: "end_session" }));
-                                        alert("Session Ended and Saved.");
-                                    }}
-                                    className="px-4 py-1.5 bg-red-600/20 hover:bg-red-600/40 border border-red-500/50 rounded text-xs font-bold text-red-200 tracking-wider transition-colors"
-                                >
-                                    END SESSION
-                                </button>
-                            </div>
-                        </header>
-
-                        {/* Transcript Content */}
-                        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                            )}
                             <AnimatePresence>
-                                {session.turns.map((turn, idx) => (
-                                    <TranscriptRow key={idx} turn={turn} onWordClick={handleWordClick} onLineClick={handleLineClick} />
+                                {turns.map((t) => (
+                                    <ChatBubble key={t.id} turn={t} onClick={handleBubbleClick} />
                                 ))}
                             </AnimatePresence>
-                            <div ref={transcriptEndRef} />
+                            {activeTurn && <ChatBubble turn={activeTurn} isPartial={true} />}
                         </div>
-                    </div>
+                    </section>
 
-                    {/* RIGHT: Marked Notes (Click-to-Mark) */}
-                    <div className="w-80 border-l border-white/20 bg-black/40 backdrop-blur-xl flex flex-col z-20 shadow-2xl">
-                        <div className="p-4 border-b border-white/10 bg-red-900/10">
-                            <h2 className="text-xs font-bold uppercase tracking-widest text-red-400">Marked Notes</h2>
-                        </div>
+                    {/* RIGHT: MARKS & NOTES (30%) */}
+                    <aside className="flex-1 flex flex-col gap-4">
+                        {/* MARKED ITEMS LIST */}
+                        <div className="flex-1 glass-panel rounded-[2.5rem] flex flex-col overflow-hidden bg-black/20">
+                            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+                                <h2 className="text-xs font-bold text-white/60 tracking-[0.25em] uppercase flex items-center gap-2">
+                                    <span className="material-symbols-rounded text-sm text-orange-500">bookmark</span>
+                                    Marked
+                                </h2>
+                                <span className="text-[10px] font-mono text-white/20">{actionableTasks.length} ITEMS</span>
+                            </div>
 
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {markedNotes.length === 0 && (
-                                <p className="text-white/30 text-sm text-center italic mt-10">Click words in the transcript to add them here.</p>
-                            )}
-                            <div className="flex flex-wrap gap-2 content-start">
+                            <div className="flex-1 overflow-y-auto p-4 scrollbar-hide space-y-2">
                                 <AnimatePresence>
-                                    {markedNotes.map((note) => (
-                                        <motion.div
-                                            key={note.id}
-                                            initial={{ opacity: 0, scale: 0.8 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 0.5 }}
-                                            layout
-                                            className="glass-panel px-3 py-1 rounded-full border border-red-500/30 bg-red-900/20 flex items-center gap-2 group cursor-default"
-                                        >
-                                            <span className="text-sm font-medium text-white">{note.text}</span>
-
-                                            {/* Delete Action */}
-                                            <button
-                                                onClick={() => setMarkedNotes(prev => prev.filter(n => n.id !== note.id))}
-                                                className="text-white/40 hover:text-red-400 transition-colors"
-                                            >
-                                                ×
-                                            </button>
-                                        </motion.div>
+                                    {actionableTasks.map((task, i) => (
+                                        <MarkCard key={task.id || i} task={task} index={i} />
                                     ))}
                                 </AnimatePresence>
                             </div>
                         </div>
 
-                        {/* Text Area for General Notes */}
-                        <div className="p-4 border-t border-white/10 bg-black/20">
-                            <textarea
-                                className="w-full h-32 bg-transparent text-sm text-white/80 placeholder-white/30 resize-none focus:outline-none"
-                                placeholder="General session notes..."
-                                value={session.notes}
-                                onChange={(e) => {
-                                    setSession(prev => ({...prev, notes: e.target.value}));
-                                    if (ws) ws.send(JSON.stringify({ message_type: "update_notes", notes: e.target.value }));
-                                }}
-                            />
-                        </div>
-                            <div className="flex-1 overflow-y-auto pr-2" ref={markedScrollRef}>
-                                {markedItems.length === 0 ? (
-                                    <div className="flex-1 flex flex-col justify-center items-center text-white/30 gap-4 h-full">
-                                        <div className="p-4 bg-white/5 rounded-full border border-dashed border-white/10">
-                                            <Icon name="mouse-pointer-click" size={24} className="opacity-50" />
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-sm font-medium text-white/50">Click words to mark</p>
-                                            <p className="text-xs mt-1 opacity-50">Saved to notes instantly</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col gap-2">
-                                        <AnimatePresence>
-                                            {markedItems.map((item, i) => (
-                                                <MarkedItem key={i} item={item} />
-                                            ))}
-                                        </AnimatePresence>
-                                    </div>
-                                )}
-                            </div>
-                        </GlassCard>
+                        {/* LIQUID NOTES WIDGET */}
+                        <LiquidNotes />
+                    </aside>
+                </main>
+            );
+        }
+
+        function App() {
+            return (
+                <StudentProvider>
+                    <div className="flex flex-col h-full relative z-10">
+                        <Header />
+                        <Dashboard />
                     </div>
 
                 </div>

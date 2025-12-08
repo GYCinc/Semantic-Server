@@ -1481,7 +1481,18 @@ def run_streaming_client():
             # Raw text configuration
             punctuate=False, # DISABLED for ESL accuracy
             format_text=False, # DISABLED for ESL accuracy
-            # CONSERVATIVE TURN DETECTION SETTINGS (Golden Settings)
+            # speaker_labels=True, # REMOVED: Ignored in v3 streaming
+            # OPTIMIZATION: We now use post-session batch diarization for accurate speaker labeling
+            # This improves diarization accuracy significantly for 1-on-1 sessions.
+            # Note: Streaming API uses 'speakers_expected' or similar if available, 
+            # but currently v3 streaming setup typically relies on 'speaker_labels=True'.
+            # We will check if 'speakers_expected' is a valid param for StreamingParameters.
+            # If not, we rely on the improved model. 
+            # The docs mention 'speakers_expected' for TranscriptionConfig (batch), 
+            # but for Streaming, it's often auto-detected.
+            # However, we can enforce conservative confidence thresholds.
+            
+            # CONSERVATIVE TURN DETECTION SETTINGS
             end_of_turn_confidence_threshold=0.7,
             min_end_of_turn_silence_when_confident=160,
             max_turn_silence=2400,
