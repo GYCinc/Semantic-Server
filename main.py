@@ -407,12 +407,8 @@ def save_turn_to_session(event: TurnEvent):
 
     detected_speaker = getattr(event, "speaker", "A") # Default to 'A' if None
     
-    # Map speakers: 'A' -> 'Aaron', 'B' -> Student Name
-    final_speaker_name = detected_speaker
-    if detected_speaker == "A":
-        final_speaker_name = config.get("speaker_name", "Aaron")
-    elif detected_speaker == "B":
-        final_speaker_name = current_session.get("student_name", "Student")
+    # REVERT: Keep raw speaker labels for diarization
+    final_speaker_name = f"Speaker {detected_speaker}" if len(detected_speaker) == 1 else detected_speaker
 
     turn_data = {
         "turn_order": event.turn_order,
@@ -717,7 +713,11 @@ def handle_mark_update_sync(data):
                 turn["mark_type"] = None
                 logger.info(f"Turn {turn_order} mark cleared")
 
-            # --- CRASH FIX: save_session_to_file() call REMOVED to prevent blocking ---
+            # --- Save immediately so UI updates persist ---
+            try:
+                 save_session_to_file()
+            except Exception as save_err:
+                 logger.error(f"Failed to save session after mark: {save_err}")
 
     except Exception as e:
         logger.error(f"MARKING ERROR for Turn {turn_order}: {e}", exc_info=True)
@@ -787,14 +787,10 @@ def on_turn(self: type[StreamingClient], event: TurnEvent):
     
     detected_speaker = getattr(event, "speaker", "A") # Default to 'A' if None
     
-    # FORCE "Aaron" if it's speaker A (assuming you are the primary speaker/host)
-    # If it's B, C, D -> Leave it as is (or map to Student Name later in frontend)
+    # REVERT: Use raw "Speaker A" / "Speaker B" for diarization stability
+    # The user specifically requested A/B only.
     
-    final_speaker_name = detected_speaker
-    if detected_speaker == "A":
-        final_speaker_name = config.get("speaker_name", "Aaron")
-    elif detected_speaker == "B":
-        final_speaker_name = current_session.get("student_name", "Student")
+    final_speaker_name = f"Speaker {detected_speaker}" if len(detected_speaker) == 1 else detected_speaker
         
     message = {
         "message_type": "transcript",
@@ -1462,8 +1458,8 @@ def run_streaming_client():
             sample_rate=16000,
             audio_encoding="pcm_s16le",
             # Raw text configuration
-            punctuate=True, # Enable punctuation for readability
-            format_text=True, # Enable formatting (casing, numbers)
+            punctuate=False, # DISABLED for ESL accuracy
+            format_text=False, # DISABLED for ESL accuracy
             # speaker_labels=True, # REMOVED: Ignored in v3 streaming
             # OPTIMIZATION: We now use post-session batch diarization for accurate speaker labeling
             # This improves diarization accuracy significantly for 1-on-1 sessions.
@@ -1483,24 +1479,48 @@ def run_streaming_client():
     )
 
     mono_stream = None
-    try:
-        # Updated default index 7 based on your setup
-        device_index = config.get("device_index", 7)
-        channel_indices = config.get("channel_indices", [])
-        logger.info(f"🎧 Using audio device index: {device_index}")
-        if channel_indices:
-            logger.info(f"🎤 Using channel indices: {channel_indices}")
 
-        mono_stream = MonoMicrophoneStream(
-            sample_rate=16000,
-            device_index=device_index,
-            channel_indices=channel_indices,
-        )
+    # Use config if valid, otherwise None (PyAudio default)
+    device_index = config.get("device_index")
+    channel_indices = config.get("channel_indices", [])
+
+    # Simple Logic: If user didn't set index, or if it failed, use Default.
+
+    try:
+        if device_index is not None:
+             logger.info(f"🎧 Attempting to use configured audio device: {device_index}")
+             try:
+                 mono_stream = MonoMicrophoneStream(
+                    sample_rate=16000,
+                    device_index=device_index,
+                    channel_indices=channel_indices,
+                 )
+             except Exception as e:
+                 logger.warning(f"⚠️ Configured device {device_index} failed: {e}")
+                 mono_stream = None # Fallback
+
+        if mono_stream is None:
+            logger.info("🔄 Using system default input device...")
+            # Find default device index
+            p = pyaudio.PyAudio()
+            try:
+                default_info = p.get_default_input_device_info()
+                default_index = default_info['index']
+                logger.info(f"✅ Found default device: [{default_index}] {default_info['name']}")
+
+                mono_stream = MonoMicrophoneStream(
+                    sample_rate=16000,
+                    device_index=default_index,
+                    channel_indices=None # Reset channels for default
+                )
+            finally:
+                p.terminate()
+
         client.stream(mono_stream)
-    except ValueError as e:
-        logger.error(f"❌ Audio device error: {e}")
-        logger.error(f"💡 Run 'python check_audio.py' to find available devices")
-        logger.error(f"💡 Then update config.json with the correct device_index")
+
+    except Exception as e:
+        logger.error(f"❌ CRITICAL AUDIO ERROR: {e}")
+        logger.error(f"💡 Run 'python check_audio.py' to debug audio devices")
     finally:
         if mono_stream:
             mono_stream.close()
