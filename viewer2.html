@@ -96,7 +96,7 @@
 </head>
 <body>
     <!-- Fallback Loading Overlay (Removed by React on Mount) -->
-    <div id="initial-loader" style="position:fixed; inset:0; background:#000; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
+    <div id="loading-overlay" style="position:fixed; inset:0; background:#000; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
         <div class="spinner"></div>
         <p style="margin-top:20px; font-family:'Inter',sans-serif; opacity:0.7;">Initializing Crimson Glass...</p>
     </div>
@@ -611,6 +611,9 @@
             connect(studentName) {
                 this.socket = new WebSocket(this.url);
                 this.socket.onopen = () => {
+                    setStatus("Online");
+                    setWs(socket); // Set ws state
+                };
                     this.handlers.onStatusChange("Connected");
                     this.socket.send(JSON.stringify({ message_type: "start_session", student_name: studentName }));
                 };
@@ -850,41 +853,42 @@
             );
         };
 
-        const MarkedItem = ({ item }) => (
-             <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white/5 border border-white/10 rounded-xl p-3 mb-3 hover:border-crimson-500/30 transition-colors group"
-             >
-                <div className="flex justify-between items-start">
-                    <span className="text-base text-white/90 font-medium">{item.text}</span>
-                    <button className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-white transition-opacity">
-                        <Icon name="x" size={14} />
-                    </button>
-                </div>
-                {item.context && (
-                    <div className="mt-2 text-xs text-white/40 italic truncate">
-                        "...{item.context}..."
-                    </div>
-                )}
-             </motion.div>
-        );
+        const MarkedItem = ({ item }) => {
+            const isWord = item.type === .vocabulary.;
+            return (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    layout
+                    className={`
+                        glass-panel rounded-full flex items-center gap-2 group cursor-default transition-all duration-200 ease-out
+                        ${isWord 
+                            ? .px-3 py-1 bg-blue-600/20 border-blue-500/30 w-fit. 
+                            : .px-4 py-2 bg-crimson-600/20 border-crimson-500/30 w-full flex-col items-start.
+                        }
+                        hover:scale-[1.02] hover:shadow-lg
+                    `}
+                >
+                    <span className={`font-medium ${isWord ? .text-sm. : .text-base leading-snug.} text-white/90`}>
+                        {item.text}
+                    </span>
 
-        // --- Main App ---
-        const App = () => {
-            const [status, setStatus] = useState("disconnected");
-            const [students, setStudents] = useState([]);
-            const [selectedStudent, setSelectedStudent] = useState("");
-            const [transcripts, setTranscripts] = useState([]);
-            const [currentTranscript, setCurrentTranscript] = useState("");
-            const [markedItems, setMarkedItems] = useState([]); // Replaced 'analysis' with 'markedItems'
-            
-            const wsRef = useRef(null);
-            const scrollRef = useRef(null);
-            const markedScrollRef = useRef(null);
-        function ChatBubble({ turn, isPartial, onClick }) {
-            const isTutor = turn.speaker && (turn.speaker === 'Aaron' || turn.speaker === 'A');
-            const springConfig = { type: "spring", stiffness: 400, damping: 25 };
+                    {/* Delete Action */}
+                    <button
+                        onClick={() => setMarkedNotes(prev => prev.filter(n => n.id !== item.id))}
+                        className="text-white/40 hover:text-crimson-400 transition-colors"
+                    >
+                        <Icon name="x" size={isWord ? 12 : 16} />
+                    </button>
+                    {item.context && !isWord && ( // Only show context for non-word items
+                        <div className="text-xs text-white/40 italic mt-1 pr-6 truncate w-full">
+                            "...{item.context}..."
+                        </div>
+                    )}
+                </motion.div>
+            );
+        };
 
             return (
                 <motion.div 
@@ -939,7 +943,7 @@
         // --- MAIN APP ---
         const App = () => {
             const [status, setStatus] = useState("Connecting...");
-            const [ws, setWs] = useState(null);
+            const [ws, setWs] = useState(null); // Lift ws into state
             const [session, setSession] = useState({ turns: [], notes: "", student_name: "Unknown", wpm: 0 });
             const [students, setStudents] = useState([]);
             const [markedNotes, setMarkedNotes] = useState([]);
@@ -949,7 +953,7 @@
 
             // Remove initial loader on mount
             useEffect(() => {
-                const loader = document.getElementById('initial-loader');
+                const loader = document.getElementById('loading-overlay');
                 if (loader) loader.style.display = 'none';
             }, []);
 
@@ -963,6 +967,9 @@
                 const socket = new WebSocket("ws://localhost:8765");
 
                 socket.onopen = () => {
+                    setStatus("Online");
+                    setWs(socket); // Set ws state
+                };
                     setStatus("Online");
                     setWs(socket);
                 };
@@ -1022,20 +1029,21 @@
 
             const handleLineClick = (turn) => {
                 const fullText = turn.words ? turn.words.map(w => w.text).join(' ') : turn.text;
-                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
                         message_type: 'update_notes', // Leveraging existing note saving or create new type
-                        note: text,
-                        context: newItem.context,
-                        timestamp: newItem.timestamp
+                        message_type: "update_notes",
+                        notes: turn.text,
+                        context: turn.context,
+                        timestamp: turn.timestamp
                     }));
                     
                     // Also send a mark update for the session log
-                    wsRef.current.send(JSON.stringify({
+                    ws.send(JSON.stringify({
                         message_type: 'mark_update',
                         mark_type: 'vocabulary', // Defaulting to vocabulary for now
                         text: text,
-                        timestamp: newItem.timestamp
+                        timestamp: turn.timestamp
                     }));
                 }
             };
