@@ -371,6 +371,14 @@ def save_turn_to_session(event: TurnEvent):
     words_data = []
     pauses = []
 
+
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ textblob not available. POS tagging disabled.")
+    TEXTBLOB_AVAILABLE = False
+
     if hasattr(event, "words") and event.words:
         for i, word in enumerate(event.words):
             word_data = {
@@ -717,7 +725,11 @@ def handle_mark_update_sync(data):
                 turn["mark_type"] = None
                 logger.info(f"Turn {turn_order} mark cleared")
 
-            # --- CRASH FIX: save_session_to_file() call REMOVED to prevent blocking ---
+            # --- Save immediately so UI updates persist ---
+            try:
+                 save_session_to_file()
+            except Exception as save_err:
+                 logger.error(f"Failed to save session after mark: {save_err}")
 
     except Exception as e:
         logger.error(f"MARKING ERROR for Turn {turn_order}: {e}", exc_info=True)
@@ -865,10 +877,11 @@ async def perform_batch_diarization(audio_path, session_path):
     try:
         transcriber = Transcriber()
         config = TranscriptionConfig(
-            speaker_labels=True,
-            speakers_expected=2, # Tutor + Student
-            punctuate=True,
-            format_text=True
+            speaker_labels=True,  # KEEP TRUE - needed to separate tutor from student
+            speakers_expected=2,
+            punctuate=False,
+            format_text=False,
+            speech_model='slam-1'
         )
         
         transcript = await transcriber.transcribe_async(audio_path, config)
@@ -895,35 +908,38 @@ async def perform_batch_diarization(audio_path, session_path):
         # OR better: Replace the text with the high-quality batch transcript?
         # NO, we want to keep the real-time analysis metadata.
         
-        # Let's just update the speaker labels for now.
-        # We'll use a time-overlap matching.
+        # Map speakers: Default A=Tutor (Aaron), B=Student
+        # This is crucial for the Corpus Filter to work later.
+        tutor_name = config.get("speaker_name", "Aaron")
+        student_name = session_data.get("student_name", "Student")
         
-        batch_utterances = transcript.utterances
-        
-        for turn in session_data['turns']:
-            # Find matching utterance in batch
-            # Turn has 'created' (ISO timestamp). We need relative time.
-            # This is hard without relative offsets.
-            # FALLBACK: Just trust the batch transcript for the final record?
-            # YES. The batch transcript is the source of truth for the database.
-            pass
+        session_data["diarized_turns"] = []
+        for u in batch_utterances:
+            spk = u.speaker
+            if spk == "A":
+                spk = tutor_name
+            elif spk == "B":
+                spk = student_name
+            
+            # Extract words with milliseconds for corpus
+            words_list = []
+            for w in u.words:
+                words_list.append({
+                    "text": w.text,
+                    "start_ms": w.start,
+                    "end_ms": w.end,
+                    "confidence": w.confidence,
+                    "duration_ms": w.end - w.start
+                })
 
-        # ACTUALLY: The most robust way is to use the BATCH transcript as the "Corpus" source
-        # and just attach the analysis metadata from the streaming session to it.
-        
-        # For now, let's just save the diarized transcript as a separate file or update the session
-        # with a "diarized_turns" field.
-        
-        session_data['diarized_turns'] = [
-            {
-                "speaker": u.speaker,
+            session_data["diarized_turns"].append({
+                "speaker": spk,
                 "text": u.text,
                 "start": u.start,
                 "end": u.end,
-                "confidence": u.confidence
-            }
-            for u in batch_utterances
-        ]
+                "confidence": u.confidence,
+                "words": words_list
+            })
         
         # Update the main turns if possible, or just save this
         with open(session_path, 'w') as f:
@@ -944,9 +960,10 @@ async def upload_analysis_to_supabase(session_path, duration_seconds, audio_path
     try:
         # 0. Run Batch Diarization if audio exists
         if audio_path:
-            success = await perform_batch_diarization(audio_path, session_path)
-            if not success:
-                logger.warning("⚠️ Proceeding with upload without diarization")
+            # SKIPPING BATCH for immediate availability as requested
+            # success = await perform_batch_diarization(audio_path, session_path)
+            # if not success:
+            logger.info("⚠️ Skipping Batch Diarization (Fast Mode Enabled)")
 
         # --- DUPLICATE PREVENTION START ---
         logger.info("🛡️ Checking for existing session to prevent duplicates...")
@@ -1477,30 +1494,54 @@ def run_streaming_client():
             
             # CONSERVATIVE TURN DETECTION SETTINGS
             end_of_turn_confidence_threshold=0.7,
-            min_end_of_turn_silence_when_confident=800,
-            max_turn_silence=3600,
+            min_end_of_turn_silence_when_confident=160,
+            max_turn_silence=2400,
         )
     )
 
     mono_stream = None
-    try:
-        # Updated default index 7 based on your setup
-        device_index = config.get("device_index", 7)
-        channel_indices = config.get("channel_indices", [])
-        logger.info(f"🎧 Using audio device index: {device_index}")
-        if channel_indices:
-            logger.info(f"🎤 Using channel indices: {channel_indices}")
 
-        mono_stream = MonoMicrophoneStream(
-            sample_rate=16000,
-            device_index=device_index,
-            channel_indices=channel_indices,
-        )
+    # Use config if valid, otherwise None (PyAudio default)
+    device_index = config.get("device_index")
+    channel_indices = config.get("channel_indices", [])
+
+    # Simple Logic: If user didn't set index, or if it failed, use Default.
+
+    try:
+        if device_index is not None:
+             logger.info(f"🎧 Attempting to use configured audio device: {device_index}")
+             try:
+                 mono_stream = MonoMicrophoneStream(
+                    sample_rate=16000,
+                    device_index=device_index,
+                    channel_indices=channel_indices,
+                 )
+             except Exception as e:
+                 logger.warning(f"⚠️ Configured device {device_index} failed: {e}")
+                 mono_stream = None # Fallback
+
+        if mono_stream is None:
+            logger.info("🔄 Using system default input device...")
+            # Find default device index
+            p = pyaudio.PyAudio()
+            try:
+                default_info = p.get_default_input_device_info()
+                default_index = default_info['index']
+                logger.info(f"✅ Found default device: [{default_index}] {default_info['name']}")
+
+                mono_stream = MonoMicrophoneStream(
+                    sample_rate=16000,
+                    device_index=default_index,
+                    channel_indices=None # Reset channels for default
+                )
+            finally:
+                p.terminate()
+
         client.stream(mono_stream)
-    except ValueError as e:
-        logger.error(f"❌ Audio device error: {e}")
-        logger.error(f"💡 Run 'python check_audio.py' to find available devices")
-        logger.error(f"💡 Then update config.json with the correct device_index")
+
+    except Exception as e:
+        logger.error(f"❌ CRITICAL AUDIO ERROR: {e}")
+        logger.error(f"💡 Run 'python check_audio.py' to debug audio devices")
     finally:
         if mono_stream:
             mono_stream.close()

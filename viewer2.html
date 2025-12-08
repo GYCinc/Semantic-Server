@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta charset="UTF-8">
     <title>Semantic Surfer - Crimson Glass</title>
     
-    <!-- React & Framer Motion -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <!-- React & ReactDOM (via CDN) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel for in-browser JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Framer Motion -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
 
     <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet"/>
@@ -124,6 +127,27 @@
             border-color: rgba(255,255,255,0.2);
             transform: translateY(-1px);
         }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <span class="loader"></span>
+    </div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // --- Icons ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        // --- Components ---
 
         .drop .options {
             position: absolute; top: 110%; left: 0; width: 100%; min-width: 200px;
@@ -160,7 +184,7 @@
     <div class="crimson-orb bg-orange-600/10 w-[500px] h-[500px] bottom-0 right-0 mix-blend-screen" style="animation-delay: -5s"></div>
     <div class="crimson-orb bg-red-900/30 w-[600px] h-[600px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mix-blend-overlay" style="animation-delay: -10s"></div>
 
-    <div id="root" class="flex flex-col h-screen relative z-10"></div>
+    <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, createContext, useContext, useMemo } = React;
@@ -277,6 +301,9 @@
             connect(studentName) {
                 this.socket = new WebSocket(this.url);
                 this.socket.onopen = () => {
+                    setStatus("Online");
+                    setWs(socket); // Set ws state
+                };
                     this.handlers.onStatusChange("Connected");
                     this.socket.send(JSON.stringify({ message_type: "start_session", student_name: studentName }));
                 };
@@ -469,7 +496,7 @@
                     </div>
                 </header>
             );
-        }
+        };
 
         function LiquidDropdown({ options, value, onChange, placeholder = "Select..." }) {
             const [isOpen, setIsOpen] = useState(false);
@@ -515,7 +542,44 @@
                     </div>
                 </div>
             );
-        }
+        };
+
+        const MarkedItem = ({ item }) => {
+            const isWord = item.type === .vocabulary.;
+            return (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    layout
+                    className={`
+                        glass-panel rounded-full flex items-center gap-2 group cursor-default transition-all duration-200 ease-out
+                        ${isWord 
+                            ? .px-3 py-1 bg-blue-600/20 border-blue-500/30 w-fit. 
+                            : .px-4 py-2 bg-crimson-600/20 border-crimson-500/30 w-full flex-col items-start.
+                        }
+                        hover:scale-[1.02] hover:shadow-lg
+                    `}
+                >
+                    <span className={`font-medium ${isWord ? .text-sm. : .text-base leading-snug.} text-white/90`}>
+                        {item.text}
+                    </span>
+
+                    {/* Delete Action */}
+                    <button
+                        onClick={() => setMarkedNotes(prev => prev.filter(n => n.id !== item.id))}
+                        className="text-white/40 hover:text-crimson-400 transition-colors"
+                    >
+                        <Icon name="x" size={isWord ? 12 : 16} />
+                    </button>
+                    {item.context && !isWord && ( // Only show context for non-word items
+                        <div className="text-xs text-white/40 italic mt-1 pr-6 truncate w-full">
+                            "...{item.context}..."
+                        </div>
+                    )}
+                </motion.div>
+            );
+        };
 
         function ChatBubble({ turn, isPartial, onClick }) {
             const isTutor = turn.speaker && (turn.speaker === 'Aaron' || turn.speaker === 'A');
@@ -550,9 +614,6 @@
                             {turn.text}
                         </p>
                     </div>
-                </motion.div>
-            );
-        }
 
         function MarkCard({ task, index }) {
             return (
@@ -583,6 +644,7 @@
                 }
             };
 
+            // WebSocket Connection
             useEffect(() => {
                 if (autoScroll && scrollRef.current) {
                     scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -654,9 +716,10 @@
                         <Header />
                         <Dashboard />
                     </div>
-                </StudentProvider>
+
+                </div>
             );
-        }
+        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
