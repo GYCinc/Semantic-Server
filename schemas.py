@@ -2,16 +2,12 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-# --- 1. The 8 Immutable Categories ---
+# --- 1. The 4 Real Linguistic Categories (SLA Domains) ---
 class AnalysisCategory(str, Enum):
-    PHRASAL_VERBS = "Phrasal Verbs"
-    VOCABULARY = "Vocabulary"
-    EXPRESSIONS = "Expressions"
-    GRAMMAR = "Grammar"
-    PRONUNCIATION = "Pronunciation"
-    FLOW = "Flow"
-    DISCOURSE = "Discourse"
-    SOCIOLINGUISTICS = "Sociolinguistics"
+    PHONOLOGY = "Phonology"       # Pronunciation, Intonation, Stress
+    LEXIS = "Lexis"               # Vocabulary, Collocations, Formulaic Language
+    SYNTAX = "Syntax"             # Grammar, Morphology, Sentence Structure
+    PRAGMATICS = "Pragmatics"     # Discourse, Coherence, Register, Appropriateness
 
 # --- 2. Analysis Payload ---
 class LanguageFeedback(BaseModel):

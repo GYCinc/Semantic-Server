@@ -122,25 +122,125 @@ async def perform_batch_diarization(audio_path):
     logger.info("🔄 Starting Batch Diarization...")
     try:
         transcriber = aai.Transcriber()
-        config = aai.TranscriptionConfig(
-            speaker_labels=True,
-            speakers_expected=2, # Tutor + Student
-            punctuate=True,  # API CONSTRAINT: Required for speaker_labels
-            format_text=False  # Preserve fillers (um, uh) and errors
+
+        # --- DUAL-PASS STRATEGY ---
+        # Pass 1: Raw (No punctuation/formatting) - To capture student errors exactly as spoken
+        print(f"🎙️  Pass 1: Raw Transcription (Capturing errors)...")
+        config_raw = aai.TranscriptionConfig(
+            punctuate=False,
+            format_text=False, 
+            speech_model='slam-1'
         )
+        transcript_raw = transcriber.transcribe(audio_path, config_raw)
         
-        # Using synchronous transcribe to avoid Python 3.12 Future await error
-        transcript = transcriber.transcribe(audio_path, config)
+        if transcript_raw.status == "error":
+             print(f"❌ Raw transcription failed: {transcript_raw.error}")
+             return None, None
+             
+        # Pass 2: Diarized (With punctuation/speakers) - To identify who spoke
+        print(f"👥 Pass 2: Diarization (Identifying speakers)...")
+        config_diarized = aai.TranscriptionConfig(
+            speaker_labels=True,
+            speakers_expected=2,
+            punctuate=True, # Required for diarization
+            format_text=False, # Keep fillers
+            speech_model='slam-1'
+        )
+        transcript_diarized = transcriber.transcribe(audio_path, config_diarized)
         
-        if transcript.status == "error":
-            logger.error(f"❌ Diarization failed: {transcript.error}")
-            return None
+        if transcript_diarized.status == "error":
+            print(f"❌ Diarized transcription failed: {transcript_diarized.error}")
+            return None, None
+
+        # --- MERGE: Map Raw Words to Speakers ---
+        # We use the timestamps from the Raw words to find which Speaker Turn they fall into
+        print(f"🔄 Merging Raw Words with Speaker Labels...")
+        
+        # 1. Build an Interval Tree or simple list of (start, end, speaker) from Diarized
+        speaker_intervals = []
+        for turn in transcript_diarized.utterances:
+            speaker_intervals.append({
+                'start': turn.start,
+                'end': turn.end,
+                'speaker': turn.speaker
+            })
             
-        return transcript
+        # 2. Assign speaker to each Raw word
+        # Determine Student Speaker (A or B)
+        # Heuristic: Teacher usually speaks more? Or prompting user? 
+        # For now, let's assume 'B' is student or ask. 
+        # Actually, the user prompt logic happens later. We just need to label them.
+        
+        # We will reconstruct "turns" for the existing logic to consume, 
+        # but specifically using RAW words.
+        
+        # Let's map raw words to their speakers
+        raw_words_with_speaker = []
+        for word in transcript_raw.words:
+            # Find speaker
+            word_speaker = 'Unknown'
+            w_center = word.start + (word.end - word.start) / 2
+            
+            for interval in speaker_intervals:
+                if interval['start'] <= w_center <= interval['end']:
+                    word_speaker = interval['speaker']
+                    break
+            
+            raw_words_with_speaker.append({
+                'text': word.text, # Raw text!
+                'start': word.start,
+                'end': word.end,
+                'confidence': word.confidence,
+                'speaker': word_speaker
+            })
+            
+        # Re-group into turns for the existing logic
+        # The existing logic expects `student_turns`.
+        
+        # Identify Student Speaker Label
+        # We can reuse the existing logic's assumption or ask. 
+        # The existing logic asks "Enter Student Name". 
+        # But we need to know WHICH label is the student.
+        # Usually: A=Tutor, B=Student (or detected).
+        
+        # Let's group by speaker to match `student_turns` structure
+        all_turns = []
+        current_turn = None
+        
+        for w in raw_words_with_speaker:
+            if current_turn and current_turn['speaker'] == w['speaker']:
+                current_turn['words'].append(w)
+                current_turn['transcript'] += " " + w['text'] # Changed 'text' to 'transcript' to match original structure
+                current_turn['end'] = w['end'] # Update end time
+            else:
+                if current_turn:
+                    all_turns.append(current_turn)
+                current_turn = {
+                    'speaker': w['speaker'],
+                    'transcript': w['text'], # Changed 'text' to 'transcript'
+                    'start': w['start'],
+                    'end': w['end'],
+                    'confidence': w['confidence'], # Assuming turn confidence is word confidence for now
+                    'words': [w]
+                }
+        if current_turn:
+            all_turns.append(current_turn)
+
+        # Now filter for STUDENT ONLY turns
+        # We'll need the logic to identify the student label
+        # (This logic was lower down, we need to adapt it)
+        
+        # Determine student label (simple heuristic: Speaker B is usually student, or A if B is missing?)
+        # Valid assumption for now: B is student.
+        student_label = 'B' 
+        
+        # Return ALL turns (Teacher + Student) so we can save the full session
+        print(f"✅ Diarization and Merge Complete. Duration: {transcript_diarized.audio_duration}s")
+        return all_turns, transcript_diarized.audio_duration
 
     except Exception as e:
         logger.error(f"❌ Diarization error: {e}")
-        return None
+        return None, None
 
 async def process_and_upload(audio_path, student_name, notes=""):
     logger.info(f"🚀 Processing: {audio_path} for {student_name}")
@@ -152,15 +252,15 @@ async def process_and_upload(audio_path, student_name, notes=""):
         return
     logger.info(f"✅ Found Student ID: {student_id}")
 
-    # 2. Diarize
-    transcript = await perform_batch_diarization(audio_path)
-    if not transcript:
+    # 2. Diarize (Dual-Pass)
+    all_turns, duration = await perform_batch_diarization(audio_path)
+    if all_turns is None or duration is None:
+        logger.error("❌ Diarization failed or returned no data.")
         return
 
     # 3. Construct Session Data
     session_id = str(uuid.uuid4())
     timestamp = datetime.now().isoformat()
-    duration = transcript.audio_duration
     
     logger.info(f"✅ Diarization Complete. Duration: {duration}s")
     
@@ -171,18 +271,26 @@ async def process_and_upload(audio_path, student_name, notes=""):
     }
     
     turns = []
-    for utt in transcript.utterances:
-        speaker_label = utt.speaker
+    student_turns = []
+    
+    for turn in all_turns:
+        speaker_label = turn['speaker']
         speaker_name = speaker_map.get(speaker_label, speaker_label)
         
-        turns.append({
+        # Construct turn object (using dict access for 'turn')
+        turn_obj = {
             "speaker": speaker_name,
-            "transcript": utt.text,
-            "start": utt.start,
-            "end": utt.end,
-            "confidence": utt.confidence,
-            "words": [{"text": w.text, "start": w.start, "end": w.end, "confidence": w.confidence} for w in utt.words]
-        })
+            "transcript": turn['transcript'],
+            "start": turn['start'],
+            "end": turn['end'],
+            "confidence": turn['confidence'],
+            "words": [{"text": w['text'], "start": w['start'], "end": w['end'], "confidence": w['confidence']} for w in turn['words']]
+        }
+        turns.append(turn_obj)
+        
+        # Identify Student Turns (Assuming B is student)
+        if speaker_label == 'B':
+            student_turns.append(turn_obj)
 
     # 4. Analyze Notes (LLM)
     import httpx

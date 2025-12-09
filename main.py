@@ -86,6 +86,59 @@ def stream_to_supabase_sync(turn_data: dict, session_id: str):
     # DISABLED: transcripts table not in current schema
     # Data is saved to student_corpus at session end instead
     return
+
+
+def diff_transcripts(raw_turns: list, diarized_turns: list, student_name: str) -> dict:
+    """
+    Compare raw streaming transcript vs diarized transcript.
+    Returns dict mapping word positions to error info where corrections occurred.
+    
+    Args:
+        raw_turns: Original streaming turns (unpunctuated)
+        diarized_turns: Post-diarization turns (punctuated/corrected)
+        student_name: Name to filter for student-only turns
+        
+    Returns:
+        Dict with word corrections: {(turn_idx, word_idx): {"raw": "...", "corrected": "..."}}
+    """
+    corrections = {}
+    
+    # Extract all raw words (student only)
+    raw_words = []
+    for turn in raw_turns:
+        if turn.get('speaker', '') != 'Aaron':  # Student turn
+            text = turn.get('transcript', turn.get('text', ''))
+            raw_words.extend(text.lower().split())
+    
+    # Extract all diarized words (student only)  
+    diarized_words = []
+    for turn_idx, turn in enumerate(diarized_turns):
+        if turn.get('speaker', '') == student_name:
+            words = turn.get('words', [])
+            for word_idx, word in enumerate(words):
+                word_text = word.get('text', '').lower().strip('.,!?;:')
+                diarized_words.append({
+                    'text': word_text,
+                    'turn_idx': turn_idx,
+                    'word_idx': word_idx,
+                    'original': word.get('text', '')
+                })
+    
+    # Simple alignment: find words that were "corrected" by punctuation
+    # Focus on punctuation differences rather than content changes
+    for i, dw in enumerate(diarized_words):
+        if i < len(raw_words):
+            raw_word = raw_words[i].strip('.,!?;:')
+            if raw_word != dw['text']:
+                # Word differs - mark as potential correction
+                corrections[(dw['turn_idx'], dw['word_idx'])] = {
+                    'raw': raw_words[i] if i < len(raw_words) else None,
+                    'corrected': dw['original'],
+                    'type': 'correction'
+                }
+    
+    logger.info(f"📊 Diff found {len(corrections)} potential corrections")
+    return corrections
     # try:
     #     row = {
     #         "session_id": session_id,
@@ -840,10 +893,62 @@ from analyzers.session_analyzer import analyze_session_file
 # ... (keep existing imports)
 
 # -------------------------------------------------------------------------
-# SUPABASE ANALYSIS UPLOAD
+# GITENGLISH HUB INTEGRATION (Petty Dantic API)
+# -------------------------------------------------------------------------
+GITENGLISH_API_BASE = os.getenv("GITENGLISH_API_BASE", "https://www.gitenglish.com")
+GITENGLISH_MCP_SECRET = os.getenv("MCP_SECRET")
+
+async def send_to_gitenglish(action: str, student_id: str, params: dict) -> dict:
+    """
+    Send data to GitEnglishHub's Petty Dantic API.
+    This is THE pipeline - Semantic Surfer sends raw data, GitEnglish handles all DB logic.
+    
+    Args:
+        action: Action name from the registry (e.g., 'sanity.createLessonAnalysis')
+        student_id: Student UUID
+        params: Action parameters
+        
+    Returns:
+        API response dict
+    """
+    if not GITENGLISH_MCP_SECRET:
+        logger.error("❌ MCP_SECRET not set! Cannot call GitEnglishHub API.")
+        return {"success": False, "error": "MCP_SECRET not configured"}
+    
+    url = f"{GITENGLISH_API_BASE}/api/mcp"
+    headers = {
+        "Authorization": f"Bearer {GITENGLISH_MCP_SECRET}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "action": action,
+        "studentId": student_id,
+        "params": params
+    }
+    
+    logger.info(f"📤 Calling GitEnglishHub: {action} for student {student_id}")
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ GitEnglishHub response: {result.get('success', 'unknown')}")
+                return result
+            else:
+                logger.error(f"❌ GitEnglishHub error ({response.status_code}): {response.text}")
+                return {"success": False, "error": response.text, "status_code": response.status_code}
+    except Exception as e:
+        logger.error(f"❌ Failed to call GitEnglishHub: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+# -------------------------------------------------------------------------
+# LEGACY SUPABASE FUNCTIONS (Kept for backwards compatibility but deprecated)
 # -------------------------------------------------------------------------
 def get_student_id(name):
-    """Find student ID by name (username or first_name)"""
+    """Find student ID by name (username or first_name) - DEPRECATED: Use GitEnglishHub API"""
     if not supabase:
         return None
     try:
@@ -853,8 +958,6 @@ def get_student_id(name):
             return res.data[0]['id']
         
         # Try first name match
-        # Note: ilike might not be available in all client versions, using eq for safety or raw filter if needed
-        # For now, let's try a simple query.
         res = supabase.table("students").select("id").eq("first_name", name).execute()
         if res.data:
             return res.data[0]['id']
@@ -1076,63 +1179,48 @@ async def upload_analysis_to_supabase(session_path, duration_seconds, audio_path
 
         # 4. BUILD CORPUS - Add student turns to student_corpus
         logger.info("📚 Building corpus from student turns...")
-        # Use turns_source for corpus building
+        
+        # Get raw and diarized turns for comparison
+        raw_turns = session_data.get('turns', [])
+        diarized_turns = session_data.get('diarized_turns', [])
+        
+        # Use diarized turns if available
+        turns_source = diarized_turns if diarized_turns else raw_turns
         student_turns = [t for t in turns_source if t.get('speaker') != config.get('speaker_name', 'Aaron')]
         
-        # DIAGNOSTIC LOGGING - Validate assumptions
-        logger.info(f"🔍 DIAGNOSTIC: Found {len(student_turns)} student turns out of {len(turns_source)} total turns")
-        logger.info(f"🔍 DIAGNOSTIC: Speaker filter: looking for turns where speaker != '{config.get('speaker_name', 'Aaron')}'")
+        # Diff raw vs diarized to find corrections/errors
+        corrections = {}
+        if raw_turns and diarized_turns:
+            corrections = diff_transcripts(raw_turns, diarized_turns, student_name)
         
-        total_words_found = 0
-        for i, turn in enumerate(student_turns):
-            words_in_turn = turn.get('words', [])
-            logger.info(f"🔍 DIAGNOSTIC: Turn {i+1}: {len(words_in_turn)} words found")
-            total_words_found += len(words_in_turn)
-            
-            # Log first few words as sample
-            if words_in_turn and i < 3:  # Log first 3 turns' words
-                sample_words = [w.get('text', '') for w in words_in_turn[:5]]
-                logger.info(f"🔍 DIAGNOSTIC: Sample words from turn {i+1}: {sample_words}")
+        # Get db_session_id from session_data or create one
+        db_session_id = session_data.get('db_session_id', session_data.get('session_id'))
         
-        logger.info(f"🔍 DIAGNOSTIC: Total words across all student turns: {total_words_found}")
+        logger.info(f"🔍 Found {len(student_turns)} student turns, {len(corrections)} potential errors")
         
-        for turn in student_turns:
-            corpus_entry = {
-                "student_id": student_id,
-                "text": turn.get('text', turn.get('transcript', '')), # Use 'text' from diarized, fallback to 'transcript'
-                "source": "transcript",
-                "metadata": {
-                    "turn_order": turn.get('turn_order'),
-                    "timestamp": turn.get('created'),
-                    "session_id": session_data.get('session_id'),
-                    "confidence": turn.get('confidence', turn.get('analysis', {}).get('avg_word_confidence')), # Use 'confidence' from diarized, fallback to streaming
-                    "wpm": turn.get('analysis', {}).get('speaking_rate_wpm') # WPM only from streaming analysis
-                }
-            }
-            try:
-                supabase.table("student_corpus").insert(corpus_entry).execute()
-            except Exception as e:
-                logger.warning(f"Failed to add turn to corpus: {e}")
-        
-        # 5. BUILD WORD-LEVEL CORPUS - Extract individual words
+        # 5. BUILD WORD-LEVEL CORPUS - Extract individual words with error flags
         logger.info("📖 Building word-level corpus...")
         word_corpus_entries = []
-        for turn in student_turns:
+        
+        for turn_idx, turn in enumerate(student_turns):
             words = turn.get('words', [])
-            for word in words:
+            for word_idx, word in enumerate(words):
+                # Check if this word was corrected (potential error)
+                is_error = (turn_idx, word_idx) in corrections
+                error_info = corrections.get((turn_idx, word_idx), {})
+                
                 word_entry = {
                     "student_id": student_id,
-                    "text": word.get('text', ''),
-                    "source": "word",
-                    "metadata": {
-                        "session_id": session_data.get('session_id'),
-                        "turn_order": turn.get('turn_order'),
-                        "word_start_ms": word.get('start_ms'),
-                        "word_end_ms": word.get('end_ms'),
-                        "word_duration_ms": word.get('duration_ms'),
-                        "confidence": word.get('confidence'),
-                        "word_is_final": word.get('word_is_final')
-                    }
+                    "session_id": str(db_session_id) if db_session_id else None,
+                    "word_text": word.get('text', ''),
+                    "source": "transcript",
+                    "word_start_ms": word.get('start_ms', word.get('start')),
+                    "word_end_ms": word.get('end_ms', word.get('end')),
+                    "word_duration_ms": word.get('duration_ms'),
+                    "word_confidence": word.get('confidence'),
+                    "is_error": is_error,
+                    "error_type": error_info.get('type') if is_error else None,
+                    "expected_form": error_info.get('raw') if is_error else None
                 }
                 word_corpus_entries.append(word_entry)
         
@@ -1143,11 +1231,9 @@ async def upload_analysis_to_supabase(session_path, duration_seconds, audio_path
                 for i in range(0, len(word_corpus_entries), batch_size):
                     batch = word_corpus_entries[i:i + batch_size]
                     supabase.table("student_corpus").insert(batch).execute()
-                logger.info(f"✅ Added {len(word_corpus_entries)} individual words to corpus")
+                logger.info(f"✅ Added {len(word_corpus_entries)} words to corpus ({len(corrections)} marked as errors)")
             except Exception as e:
                 logger.warning(f"Failed to add word-level corpus entries: {e}")
-        
-        logger.info(f"✅ Added {len(student_turns)} turns to corpus")
 
         # 5. PROCESS NOTES - Send through LLM for intent extraction
         notes_raw = session_data.get('notes', '')
@@ -1201,33 +1287,84 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
                 json.dump(session_data, f)
                 
             # Extract specific, actionable phenomena that Lemur can detect from transcript data
+            # USE STANDARDIZED 4-DOMAIN PROMPT
             phenomena_extraction_prompt = (
                 "You are an expert ESL tutor analyzing a student transcript. "
                 "Extract ONLY specific, actionable teaching points that you can detect from the text. "
-                "Focus on patterns and specific examples, not general categories.\n\n"
-                "For VOCABULARY: Identify specific words/phrases the student struggled with "
-                "(look for: low confidence words, long pauses before words, substitutions). "
-                "List the exact words and context.\n\n"
-                "For GRAMMAR: Find recurring error patterns (tense issues, article misuse, "
-                "word order problems). Quote specific examples from the transcript.\n\n"
-                "For PRONUNCIATION: Flag words with unusually low confidence scores that "
-                "might indicate mispronunciation. List the specific words.\n\n"
-                "For FLUENCY: Count and list filler words (um, uh, like), note long pauses (>1s), "
-                "and identify self-corrections.\n\n"
-                "For COMMUNICATION STRATEGIES: Note how the student compensates for gaps "
-                "(circumlocution, asking for help, using gestures if mentioned).\n\n"
-                "For LISTENING: Identify inappropriate responses that suggest "
-                "misunderstanding.\n\n"
-                "Format as a structured list with specific examples and timestamps if available. "
-                "Be concrete and actionable, not general."
+                "1. **Topics & Subjects**: List the main topics discussed.\n"
+                "2. **Linguistic Analysis**: Rate (1-10) and comment on these 4 linguistic domains:\n"
+                "   - Phonology (Pronunciation, intonation, connected speech features if inferred)\n"
+                "   - Lexis (Vocabulary range, collocations, idiomatic usage)\n"
+                "   - Syntax (Grammar accuracy, sentence complexity, morphology)\n"
+                "   - Pragmatics (Discourse coherence, register, turn-taking, appropriateness)\n"
+                "Format the output as a structured JSON-like list with keys: domain, specific_feature, text, contexts."
             )
             
             analysis_results = run_lemur_query(temp_session_path, custom_prompt=phenomena_extraction_prompt)
-            lemur_response = analysis_results.get('lemur_analysis', {}).get('response', 'No analysis generated.')
+            lemur_response_text = analysis_results.get('lemur_analysis', {}).get('response', 'No analysis generated.')
             
             # Clean up temp file
             if temp_session_path.exists():
                 temp_session_path.unlink()
+                
+            # --- PARSE & INSERT LINGUISTIC PHENOMENA (Supabase) ---
+            mapped_phenomena = []
+            try:
+                import re
+                json_match = re.search(r'\[.*\]', lemur_response_text, re.DOTALL)
+                parsed_items = []
+                if json_match:
+                    parsed_items = json.loads(json_match.group(0))
+                else:
+                    # Attempt to parse if it's a pure JSON list
+                    try:
+                        parsed_items = json.loads(lemur_response_text)
+                    except:
+                        pass # It might be text-heavy
+                
+                if isinstance(parsed_items, list):
+                    for item in parsed_items:
+                        domain = item.get('domain', '')
+                        feature = item.get('specific_feature', item.get('type', '')).lower()
+                        text = item.get('text', '')
+                        
+                        public_category = 'Vocabulary' # Default
+                        
+                        if domain == 'Phonology' or domain == 'Pragmatics':
+                            public_category = 'Fluency & Flow'
+                        elif domain == 'Syntax':
+                            public_category = 'Grammar'
+                        elif domain == 'Lexis':
+                            if 'phrasal verb' in feature: public_category = 'Phrasal Verbs'
+                            elif 'collocation' in feature or 'pair' in feature: public_category = 'Collocations'
+                            elif 'idiom' in feature or 'expression' in feature: public_category = 'Idioms & Fixed Phrases'
+                            else: public_category = 'Vocabulary'
+                        else: 
+                            # Fallback
+                            if 'grammar' in feature or 'tense' in feature: public_category = 'Grammar'
+                            elif 'phrasal verb' in feature: public_category = 'Phrasal Verbs'
+                            elif 'collocation' in feature: public_category = 'Collocations'
+                            elif 'idiom' in feature: public_category = 'Idioms & Fixed Phrases'
+                            elif 'flow' in feature or 'fluency' in feature: public_category = 'Fluency & Flow'
+
+                        mapped_phenomena.append({
+                            "student_id": student_id,
+                            "session_id": session_data.get('session_id'),
+                            "item_name": text,
+                            "category": public_category,
+                            "difficulty": 1,
+                            "description": f"Extracted via Live Server. Context: {item.get('contexts', [''])[0] if item.get('contexts') else 'N/A'}"
+                        })
+                
+                if mapped_phenomena:
+                    logger.info(f"🔄 Inserting {len(mapped_phenomena)} mapped phenomena to Supabase...")
+                    supabase.table("linguistic_phenomena").insert(mapped_phenomena).execute()
+                    logger.info("✅ Phenomena inserted successfully.")
+
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to parse/insert phenomena: {e}")
+                
+            lemur_response = lemur_response_text # Pass text downstream
         except Exception as e:
             logger.error(f"❌ LeMUR Analysis Error: {e}")
 
@@ -1263,15 +1400,33 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
                 "Content-Type": "application/json"
             }
             
+            # Build scores object from analysis if available
+            scores_data = {
+                "word_count": analysis.get('student_metrics', {}).get('total_words', 0),
+                "avg_wpm": analysis.get('student_metrics', {}).get('avg_wpm', 0),
+                "total_turns": analysis.get('student_metrics', {}).get('turn_count', 0),
+            }
+            
+            # Ensure sessionDate is ISO format
+            session_date_raw = analysis.get('session_info', {}).get('start_time')
+            session_date_iso = None
+            if session_date_raw:
+                try:
+                    # Handle various date formats
+                    if isinstance(session_date_raw, str):
+                        session_date_iso = session_date_raw if 'T' in session_date_raw else f"{session_date_raw}T00:00:00Z"
+                except:
+                    session_date_iso = datetime.now().isoformat()
+            
             mutations = {
                 "mutations": [
                     {
                         "create": {
-                            "_type": "lessonAnalysis", # Generic type
+                            "_type": "lessonAnalysis",
                             "studentName": student_name,
-                            "sessionDate": analysis.get('session_info', {}).get('start_time'),
-                            "analysisReport": lemur_response,
-                            "scores": {} 
+                            "sessionDate": session_date_iso,
+                            "analysisReport": lemur_response or "No analysis generated.",
+                            "scores": json.dumps(scores_data)  # Must be string, not object!
                         }
                     }
                 ]
@@ -1301,25 +1456,77 @@ def on_terminated(self: type[StreamingClient], event: TerminationEvent):
     save_session_to_file()
     logger.info(f"Session saved to: {current_session['file_path']}")
 
-    # --- Upload Analysis to Supabase ---
-    if supabase and current_session["session_id"]:
-        try:
-            # Run upload_analysis_to_supabase in a separate thread to avoid blocking
-            # It's an async function, so we need to run it in the event loop
-            # or use asyncio.run_coroutine_threadsafe if main_loop is available.
-            # For simplicity, let's use a new event loop for this thread.
-            def run_async_upload():
-                asyncio.run(upload_analysis_to_supabase(
-                    current_session["file_path"],
-                    event.audio_duration_seconds,
-                    current_session["audio_path"]
+    # --- SEND TO GITENGLISH HUB (The proper pipeline!) ---
+    # Semantic Surfer does diarization, GitEnglishHub handles all DB/analysis logic
+    logger.info("📤 Sending session data to GitEnglishHub...")
+    
+    try:
+        # Load the session data we just saved
+        with open(current_session["file_path"], 'r') as f:
+            session_data = json.load(f)
+        
+        student_name = session_data.get('student_name', 'Unknown')
+        student_id = get_student_id(student_name)  # Get ID from local lookup
+        
+        if not student_id:
+            logger.warning(f"⚠️ Student '{student_name}' not found. Using name for lookup.")
+            student_id = student_name  # GitEnglishHub will resolve it
+        
+        # Prepare the analysis report from session data
+        student_turns = [t for t in session_data.get('turns', []) 
+                        if t.get('speaker') != config.get('speaker_name', 'Aaron')]
+        
+        # Build a simple transcript for analysis
+        transcript_text = "\n".join([
+            f"{t.get('speaker', 'Student')}: {t.get('transcript', '')}"
+            for t in session_data.get('turns', [])
+        ])
+        
+        # Calculate basic metrics
+        total_words = sum(len(t.get('words', [])) for t in student_turns)
+        wpms = [t.get('analysis', {}).get('speaking_rate_wpm') for t in student_turns]
+        wpms = [w for w in wpms if w is not None]
+        avg_wpm = round(sum(wpms) / len(wpms), 1) if wpms else 0
+        
+        # Send to GitEnglishHub's Petty Dantic API
+        def run_async_send():
+            try:
+                # 1. Create lesson analysis in Sanity
+                result = asyncio.run(send_to_gitenglish(
+                    action='sanity.createLessonAnalysis',
+                    student_id=student_id,
+                    params={
+                        'studentName': student_name,
+                        'sessionDate': session_data.get('start_time'),
+                        'analysisReport': f"Session completed. Duration: {event.audio_duration_seconds}s, Words: {total_words}, Avg WPM: {avg_wpm}\n\nTranscript:\n{transcript_text[:2000]}..."
+                    }
                 ))
-            threading.Thread(
-                target=run_async_upload,
-                daemon=True
-            ).start()
-        except Exception as e:
-            logger.error(f"Error spawning Supabase upload thread: {e}")
+                
+                if result.get('success'):
+                    logger.info("✅ Session sent to GitEnglishHub successfully!")
+                    print("✅ Session data sent to GitEnglishHub!")
+                else:
+                    logger.error(f"❌ GitEnglishHub upload failed: {result.get('error')}")
+                    print(f"❌ Upload failed: {result.get('error')}")
+                    
+                # 2. Add student turns to corpus (optional - depends on your needs)
+                # This can be done later by GitEnglishHub when processing the session
+                
+            except Exception as e:
+                logger.error(f"❌ CRITICAL: Failed to send to GitEnglishHub: {e}", exc_info=True)
+                print(f"❌ CRITICAL: Session NOT uploaded! Error: {e}")
+        
+        # Run in thread but wait for completion
+        upload_thread = threading.Thread(target=run_async_send, daemon=False)
+        upload_thread.start()
+        upload_thread.join(timeout=60)
+        
+        if upload_thread.is_alive():
+            logger.warning("⚠️ Upload still running after 60s. Session may not be saved.")
+            
+    except Exception as e:
+        logger.error(f"❌ Error preparing session data: {e}", exc_info=True)
+        print(f"❌ Failed to prepare session for upload: {e}")
 
     print_session_summary()
 
