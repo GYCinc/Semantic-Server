@@ -59,22 +59,15 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
     elif not lemur_prompt:
         logger.error("LeMUR: No custom prompt found in session file. Using default.")
         lemur_prompt = (
-        "As an expert ESL tutor, analyze the student's spoken English from this conversation. "
+        "As an expert ESL tutor, analyze the student.s spoken English from this conversation. "
         "Focus strictly on observable linguistic phenomena relevant to language acquisition. "
-        "Identify specific areas of strength and weakness in Phonology (pronunciation features), "
-        "Lexis (vocabulary & idioms), Syntax (grammar structure), and Pragmatics (discourse & register). "
+        "Identify specific areas of strength and weakness in grammar, vocabulary, pronunciation, "
+        "fluency (pauses, rate, fillers), and discourse coherence. "
         "Provide concrete examples from the transcript. "
         "DO NOT generate metaphorical language, philosophical interpretations, "
         "or content unrelated to ESL teaching and learning. "
-        "Avoid any 'hippie-like', abstract, or non-academic terminology. "
-        "Present findings clearly and concisely, directly referencing the student's language use. "
-        "\\n\\n"
-        "ADDITIONALLY, provide constructive feedback for the TUTOR on their teaching approach: "
-        "1. Talk Time Balance: Did the tutor give adequate speaking opportunities? "
-        "2. Vocabulary Calibration: Was tutor vocabulary appropriate for student level? "
-        "3. Wait Time: Did the tutor pause adequately for student responses? "
-        "4. Scaffolding: Were prompts helpful without speaking over the student? "
-        "Be direct and balanced - include both positives and areas for improvement."
+        "Avoid any .hippie-like., abstract, or non-academic terminology. "
+        "Present findings clearly and concisely, directly referencing the student.s language use. "
     )
 
     # 3. Refine the prompt (Add context about the student)
