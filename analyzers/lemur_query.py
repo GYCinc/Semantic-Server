@@ -97,9 +97,11 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
             text = turn.get('transcript', '')
             input_text += f"{speaker}: {text}\n"
 
-        result = aai.Lemur.task(
+        # LeMUR task via Lemur instance (correct SDK pattern)
+        lemur = aai.Lemur()
+        result = lemur.task(
             prompt=full_lemur_prompt,
-            final_model='default',
+            final_model='anthropic/claude-3-haiku',  # Valid model name
             input_text=input_text 
         )
 
@@ -109,8 +111,8 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
         return {
             "lemur_analysis": {
                 "response": lemur_response,
-                "model": result.model,
-                "cost_estimate": "See AssemblyAI pricing dashboard"
+                "request_id": result.request_id,
+                "usage": str(result.usage) if result.usage else None
             }
         }
 
