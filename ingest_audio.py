@@ -128,8 +128,8 @@ async def perform_batch_diarization(audio_path):
         print(f"🎙️  Pass 1: Raw Transcription (Capturing errors)...")
         config_raw = aai.TranscriptionConfig(
             punctuate=False,
-            format_text=False
-            # NOTE: slam-1 is for STREAMING only, not batch. Using default model for files.
+            format_text=False,
+            speech_model='universal'  # Universal for raw batch
         )
         transcript_raw = transcriber.transcribe(audio_path, config_raw)
         
@@ -143,8 +143,8 @@ async def perform_batch_diarization(audio_path):
             speaker_labels=True,
             speakers_expected=2,
             punctuate=True, # Required for diarization
-            format_text=False # Keep fillers
-            # NOTE: slam-1 is for STREAMING only, not batch.
+            format_text=False, # Keep fillers
+            speech_model='slam-1'  # slam-1 for diarized
         )
         transcript_diarized = transcriber.transcribe(audio_path, config_diarized)
         
