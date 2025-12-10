@@ -331,7 +331,106 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
             logger.warning(f"Note analysis failed: {e}")
             notes_analysis = {"raw_notes": notes}
 
-    # Build the transcript text for the analysis report
+    # ============================================================
+    # STEP 2.5: LeMUR LINGUISTIC ANALYSIS (The "Guru")
+    # ============================================================
+    logger.info("🦁 Sending transcript to LeMUR for Deep Linguistic Analysis...")
+
+    lemur_analysis = None
+    extracted_phenomena = []
+
+    try:
+        # Construct the "Agent Prompt"
+        # We process the FULL transcript (Teacher + Student) to give context,
+        # but ask the LLM to focus on the Student's errors.
+        
+        # Format transcript for LeMUR
+        full_transcript_text = "\n".join([f"{t['speaker']}: {t['transcript']}" for t in turns])
+        
+        system_prompt = f"""You are an Expert Applied Linguist and ESL Analyst. 
+your task is to analyze the speech of the student ("{student_name}") in the following transcript.
+The other speaker ("Aaron" or "Tutor") is the teacher.
+
+Analyze the student's speech for errors and patterns across these 4 domains:
+1. PHONOLOGY: Pronunciation issues, stress errors, intonation problems (if inferable or marked in text), and fluency breaks.
+2. LEXIS: Vocabulary choices, potential false friends, collocation errors, phrasal verb misuse.
+3. SYNTAX: Grammatical errors, sentence structure issues, tense consistency.
+4. PRAGMATICS: Register appropriateness, cohesiveness, turn-taking.
+
+For each error or notable pattern found:
+- Quote the specific text (Context).
+- Categorize it into one of the 4 domains.
+- Provide a correction or better alternative.
+- Explain WHY it is an error (brief linguistic explanation).
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with this structure:
+{{
+  "summary": "Brief executive summary of student performance...",
+  "errors": [
+    {{
+      "domain": "Syntax",
+      "error_type": "Tense Consistency",
+      "text": "I have went to the store",
+      "correction": "I went to the store (or I have gone)",
+      "explanation": "Confusion between past simple and present perfect/participle."
+    }},
+    ...
+  ],
+  "strengths": ["list of strengths..."],
+  "cefr_estimate": "B1/B2 etc."
+}}
+"""
+        
+        # Call LeMUR
+        # Note: We use the 'transcript_ids' param to let LeMUR access the full AAI transcript features
+        # But we also pass the 'input_text' context via the prompt if we want specific formatting.
+        # Actually, best practice with AAI SDK is `transcript.lemur.task(prompt, final_model=...)`
+        
+        # We don't have the 'transcript' object from batch (we do! `transcript_diarized`).
+        # But `process_and_upload` receives `audio_path`.
+        # Wait, `perform_batch_diarization` returns `all_turns`, not the transcript object.
+        # I need to fetch the transcript object or pass it back.
+        # Refactoring `perform_batch_diarization` to return transcript input ID?
+        # Or just pass the text to LeMUR task via context? Passing text is easier/flexible.
+        
+        lemur_output = aai.Lemur().task(
+            prompt=system_prompt,
+            input_text=full_transcript_text,
+            final_model=aai.LemurModel.claude3_5_sonnet # High intelligence model
+        )
+        
+        logger.info(f"🦁 LeMUR Response received. Tokens: {lemur_output.usage}")
+        
+        # Parse JSON
+        try:
+            # Clean potential markdown fences
+            clean_response = lemur_output.response.replace("```json", "").replace("```", "").strip()
+            lemur_data = json.loads(clean_response)
+            
+            lemur_analysis = lemur_data.get('summary')
+            
+            # Convert LeMUR errors to our ExtractedPhenomena format
+            for err in lemur_data.get('errors', []):
+                extracted_phenomena.append({
+                    "item": err.get('text'),
+                    "category": err.get('domain'), # Will be cross-referenced later
+                    "context": f"{err.get('text')} -> {err.get('correction')}",
+                    "explanation": err.get('explanation'),
+                    "correction": err.get('correction'),
+                    "confidence": 0.9 # High confidence from LeMUR
+                })
+                
+            logger.info(f"✅ Extracted {len(extracted_phenomena)} linguistic phenomena")
+            
+        except json.JSONDecodeError:
+            logger.error("❌ Failed to parse LeMUR JSON response")
+            lemur_analysis = lemur_output.response # Fallback to raw text
+
+    except Exception as e:
+        logger.error(f"❌ LeMUR Task Failed: {e}")
+
+    # Build the transcript text for the analysis report (Legacy format)
     student_turns = [t for t in turns if t["speaker"] != "Aaron"]
     transcript_text = "\n".join([
         f"{t['speaker']}: {t['transcript']}"
@@ -347,35 +446,41 @@ Duration: {duration}s
 Student Words: {total_words}
 Turns: {len(student_turns)}
 
-{notes_analysis.get('llm_analysis', '') if notes_analysis else ''}
+-- LeMUR Summary --
+{lemur_analysis if lemur_analysis else 'No analysis available.'}
 
---- Transcript ---
-{transcript_text[:3000]}...
+-- Teaching Notes Analysis --
+{notes_analysis.get('llm_analysis', '') if notes_analysis else ''}
 """
 
     # ============================================================
-    # SEND TO GITENGLISHHUB (The proper pipeline!)
-    # This is the ONLY place that should touch databases.
+    # STEP 1: CREATE SESSION IN GITENGLISHHUB (For Curation UI)
+    # This creates the student_sessions record so teacher can curate
     # ============================================================
-    logger.info("📤 Sending to GitEnglishHub via Petty Dantic API...")
+    logger.info("📤 Creating session via Petty Dantic API...")
     
-    result = await send_to_gitenglish(
-        action='sanity.createLessonAnalysis',
+    session_result = await send_to_gitenglish(
+        action='ingest.createSession',
         student_id=student_id,
         params={
-            'studentName': student_name,
+            'turns': turns,  # Full turns data with words
+            'transcriptText': transcript_text,
             'sessionDate': timestamp,
-            'analysisReport': analysis_report
+            'duration': duration,
+            'lemurAnalysis': lemur_analysis,
+            'extractedPhenomena': extracted_phenomena
         }
     )
     
-    if result.get('success'):
-        logger.info("✅ Successfully sent to GitEnglishHub!")
-        logger.info(f"   Response: {result.get('data', {})}")
+    if session_result.get('success'):
+        session_id = session_result.get('sessionId')
+        logger.info(f"✅ Session created: {session_id}")
+        logger.info(f"   Pending words: {session_result.get('pendingWords', 0)}")
     else:
-        logger.error(f"❌ GitEnglishHub upload failed: {result.get('error')}")
+        logger.error(f"❌ Session creation failed: {session_result.get('error')}")
         logger.error("   Check MCP_SECRET matches between systems")
         return
+
 
     # ============================================================
     # SEND STUDENT WORDS TO CORPUS (Via API)
