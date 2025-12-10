@@ -58,7 +58,17 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
         lemur_prompt = custom_prompt
     elif not lemur_prompt:
         logger.error("LeMUR: No custom prompt found in session file. Using default.")
-        lemur_prompt = "Analyze this student conversation for language learning insights."
+        lemur_prompt = (
+        "As an expert ESL tutor, analyze the student.s spoken English from this conversation. "
+        "Focus strictly on observable linguistic phenomena relevant to language acquisition. "
+        "Identify specific areas of strength and weakness in grammar, vocabulary, pronunciation, "
+        "fluency (pauses, rate, fillers), and discourse coherence. "
+        "Provide concrete examples from the transcript. "
+        "DO NOT generate metaphorical language, philosophical interpretations, "
+        "or content unrelated to ESL teaching and learning. "
+        "Avoid any .hippie-like., abstract, or non-academic terminology. "
+        "Present findings clearly and concisely, directly referencing the student.s language use. "
+    )
 
     # 3. Refine the prompt (Add context about the student)
     full_lemur_prompt = (
@@ -87,9 +97,11 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
             text = turn.get('transcript', '')
             input_text += f"{speaker}: {text}\n"
 
-        result = aai.Lemur.task(
+        # LeMUR task via Lemur instance (correct SDK pattern)
+        lemur = aai.Lemur()
+        result = lemur.task(
             prompt=full_lemur_prompt,
-            final_model='default',
+            final_model='anthropic/claude-3-haiku',  # Valid model name
             input_text=input_text 
         )
 
@@ -99,8 +111,8 @@ def run_lemur_query(session_file: Path, custom_prompt: str = None):
         return {
             "lemur_analysis": {
                 "response": lemur_response,
-                "model": result.model,
-                "cost_estimate": "See AssemblyAI pricing dashboard"
+                "request_id": result.request_id,
+                "usage": str(result.usage) if result.usage else None
             }
         }
 
