@@ -95,11 +95,32 @@
     </style>
 </head>
 <body>
+    <div id="error-overlay" style="display:none; position:fixed; inset:0; background:#450a0a; color:white; padding:20px; z-index:9999; font-family:sans-serif;">
+        <h2 style="color:#ef4444">Application Error</h2>
+        <pre id="error-message" style="white-space:pre-wrap; background:rgba(0,0,0,0.3); padding:10px; border-radius:4px;"></pre>
+        <button onclick="location.reload()" style="margin-top:20px; padding:8px 16px; background:white; color:black; border:none; border-radius:4px; cursor:pointer;">Retry</button>
+    </div>
+
     <div id="root"></div>
+
+    <script>
+        // Global Error Handler to catch React/CDN failures
+        window.onerror = function(msg, url, line, col, error) {
+            document.getElementById('error-overlay').style.display = 'block';
+            document.getElementById('error-message').textContent = `${msg}\n\nAt: ${url}:${line}:${col}\n\n${error?.stack || ''}`;
+            return false;
+        };
+    </script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
-        const { motion, AnimatePresence } = window.Motion;
+
+        // Safe Motion Destructuring (Fallback if CDN fails)
+        const MotionLib = window.Motion || {
+            motion: new Proxy({}, { get: () => 'div' }),
+            AnimatePresence: ({children}) => children
+        };
+        const { motion, AnimatePresence } = MotionLib;
 
         // --- COMPONENTS ---
 

@@ -713,9 +713,9 @@ def handle_mark_update_sync(data):
                 turn["mark_type"] = None
                 logger.info(f"Turn {turn_order} mark cleared")
 
-            # --- Save immediately so UI updates persist ---
+            # --- Save asynchronously so UI doesn't freeze ---
             try:
-                 save_session_to_file()
+                 threading.Thread(target=save_session_to_file, daemon=True).start()
             except Exception as save_err:
                  logger.error(f"Failed to save session after mark: {save_err}")
 
