@@ -468,12 +468,8 @@ except ImportError:
 
     detected_speaker = getattr(event, "speaker", "A") # Default to 'A' if None
     
-    # Map speakers: 'A' -> 'Aaron', 'B' -> Student Name
-    final_speaker_name = detected_speaker
-    if detected_speaker == "A":
-        final_speaker_name = config.get("speaker_name", "Aaron")
-    elif detected_speaker == "B":
-        final_speaker_name = current_session.get("student_name", "Student")
+    # REVERT: Keep raw speaker labels for diarization
+    final_speaker_name = f"Speaker {detected_speaker}" if len(detected_speaker) == 1 else detected_speaker
 
     turn_data = {
         "turn_order": event.turn_order,
@@ -778,9 +774,9 @@ def handle_mark_update_sync(data):
                 turn["mark_type"] = None
                 logger.info(f"Turn {turn_order} mark cleared")
 
-            # --- Save immediately so UI updates persist ---
+            # --- Save asynchronously so UI doesn't freeze ---
             try:
-                 save_session_to_file()
+                 threading.Thread(target=save_session_to_file, daemon=True).start()
             except Exception as save_err:
                  logger.error(f"Failed to save session after mark: {save_err}")
 
@@ -852,14 +848,10 @@ def on_turn(self: type[StreamingClient], event: TurnEvent):
     
     detected_speaker = getattr(event, "speaker", "A") # Default to 'A' if None
     
-    # FORCE "Aaron" if it's speaker A (assuming you are the primary speaker/host)
-    # If it's B, C, D -> Leave it as is (or map to Student Name later in frontend)
+    # REVERT: Use raw "Speaker A" / "Speaker B" for diarization stability
+    # The user specifically requested A/B only.
     
-    final_speaker_name = detected_speaker
-    if detected_speaker == "A":
-        final_speaker_name = config.get("speaker_name", "Aaron")
-    elif detected_speaker == "B":
-        final_speaker_name = current_session.get("student_name", "Student")
+    final_speaker_name = f"Speaker {detected_speaker}" if len(detected_speaker) == 1 else detected_speaker
         
     message = {
         "message_type": "transcript",

@@ -17,6 +17,8 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
+    minWidth: 800,
+    minHeight: 600,
     backgroundColor: "#1a1a2e",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -25,6 +27,7 @@ function createWindow() {
       backgroundThrottling: false, // Prevent freezing in background
     },
     frame: false,
+    resizable: true,
     titleBarStyle: "hidden",
     alwaysOnTop: true, // Keep the window always on top
   });
