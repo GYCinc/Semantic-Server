@@ -338,66 +338,87 @@ Provide a structured JSON response with: teaching_moments, action_items, progres
 
     lemur_analysis = None
     extracted_phenomena = []
+    prioritized_to_do_list = []
+    student_profile = {}
 
     try:
-        # Construct the "Agent Prompt"
-        # We process the FULL transcript (Teacher + Student) to give context,
-        # but ask the LLM to focus on the Student's errors.
+        # Construct the "Agent Prompt" (User-Provided)
+        system_prompt = """You are an expert applied linguist and instructional designer. The user will provide a transcript of a one-on-one English tutoring session between a tutor (named "Aaron") and a student. Your task is to analyze the student's spoken language, identify systematic errors (especially those that appear fossilized), and produce a personalized, prioritized to-do list to help the student improve.
+
+## Instructions
+
+1. **Identify the student's lines**  
+   - The tutor is always labeled "Aaron". All other speech belongs to the student. Ignore the tutor's utterances for error analysis (they may be used only for context).
+
+2. **Extract and categorize errors**  
+   - Read each student utterance carefully.  
+   - For each error, determine whether it is a **systematic error** (repeated, pattern‑based) or a **slip** (one‑off mistake). Focus on systematic errors; ignore slips unless they are frequent.  
+   - Categorize each systematic error as one of:  
+     - **Syntax** – includes word order, clause structure, and morphological issues (verb tense, aspect, agreement, articles, plurals, etc.)  
+     - **Lexis** – word choice, collocations, idioms, preposition use  
+     - **Pragmatics** – register, politeness, cultural appropriateness, conversational strategies  
+   - Note the exact utterance, a corrected version, the category, and a brief linguistic explanation (e.g., L1 interference, overgeneralization).
+
+3. **Estimate the student's CEFR level**  
+   - Based on the overall complexity, range, and accuracy of the language, assign a CEFR level (A1, A2, B1, B2, C1, C2). Provide a short justification in your reasoning.
+
+4. **Select the top three errors**  
+   - Evaluate the impact of each systematic error on communication. Consider frequency, comprehensibility, and potential for misunderstanding.  
+   - Choose **up to three** errors that are most detrimental. If there are fewer than three systematic errors, select all of them.
+
+5. **Design specific remedial tasks**  
+   - For each selected error, create **one concrete, actionable task** the student can do to address that error.  
+   - Tasks must be specific (e.g., "Complete 10 gap‑fill exercises on the present perfect vs. simple past", "Use flashcards to practice collocations with 'make' and 'do'", "Record yourself making polite requests and compare with native speaker examples").  
+   - Avoid vague advice like "study grammar" or "watch movies".
+
+6. **Assign priorities**  
+   - Assign each task a priority based on how urgently it should be addressed:  
+     - **HIGH** – the error severely impedes understanding; address immediately.  
+     - **MEDIUM** – the error is noticeable but less critical; address after high‑priority items.  
+     - **LOW** – the error is minor or stylistic; address once higher priorities are handled.  
+   - Use only the labels "HIGH", "MEDIUM", or "LOW" for the `priority` field.
+
+7. **Prepare the final JSON output**  
+   - Construct a JSON object **exactly** following the schema below.  
+   - Do not include any extra text, commentary, or markdown formatting outside the JSON.  
+   - Ensure the JSON is valid (use double quotes, escape characters properly).  
+   - The JSON must contain exactly the fields described; do not add extra keys.
+
+## Output Schema
+
+```json
+{
+  "student_profile": {
+    "cefr_estimate": "CEFR level (e.g., B1)",
+    "dominant_issue": "A concise description of the most prominent systematic error pattern"
+  },
+  "internal_reasoning": "A short paragraph explaining your analysis: why you chose these errors, how you estimated the CEFR level, and any other relevant observations.",
+  "annotated_errors": [
+    {
+      "quote": "The exact student utterance containing the error",
+      "correction": "A native‑like version of the utterance",
+      "linguistic_category": "Syntax / Lexis / Pragmatics",
+      "explanation": "Brief linguistic description (e.g., 'L1 transfer causing omission of articles')"
+    }
+  ],
+  "prioritized_to_do_list": [
+    {
+      "priority": "HIGH",
+      "task": "Specific, actionable task description",
+      "reason": "Explanation of how this task addresses the corresponding error"
+    }
+  ]
+}
+```
+"""
         
         # Format transcript for LeMUR
         full_transcript_text = "\n".join([f"{t['speaker']}: {t['transcript']}" for t in turns])
         
-        system_prompt = f"""You are an Expert Applied Linguist and ESL Analyst. 
-your task is to analyze the speech of the student ("{student_name}") in the following transcript.
-The other speaker ("Aaron" or "Tutor") is the teacher.
-
-Analyze the student's speech for errors and patterns across these 4 domains:
-1. PHONOLOGY: Pronunciation issues, stress errors, intonation problems (if inferable or marked in text), and fluency breaks.
-2. LEXIS: Vocabulary choices, potential false friends, collocation errors, phrasal verb misuse.
-3. SYNTAX: Grammatical errors, sentence structure issues, tense consistency.
-4. PRAGMATICS: Register appropriateness, cohesiveness, turn-taking.
-
-For each error or notable pattern found:
-- Quote the specific text (Context).
-- Categorize it into one of the 4 domains.
-- Provide a correction or better alternative.
-- Explain WHY it is an error (brief linguistic explanation).
-
-OUTPUT FORMAT:
-Return ONLY a valid JSON object with this structure:
-{{
-  "summary": "Brief executive summary of student performance...",
-  "errors": [
-    {{
-      "domain": "Syntax",
-      "error_type": "Tense Consistency",
-      "text": "I have went to the store",
-      "correction": "I went to the store (or I have gone)",
-      "explanation": "Confusion between past simple and present perfect/participle."
-    }},
-    ...
-  ],
-  "strengths": ["list of strengths..."],
-  "cefr_estimate": "B1/B2 etc."
-}}
-"""
-        
-        # Call LeMUR
-        # Note: We use the 'transcript_ids' param to let LeMUR access the full AAI transcript features
-        # But we also pass the 'input_text' context via the prompt if we want specific formatting.
-        # Actually, best practice with AAI SDK is `transcript.lemur.task(prompt, final_model=...)`
-        
-        # We don't have the 'transcript' object from batch (we do! `transcript_diarized`).
-        # But `process_and_upload` receives `audio_path`.
-        # Wait, `perform_batch_diarization` returns `all_turns`, not the transcript object.
-        # I need to fetch the transcript object or pass it back.
-        # Refactoring `perform_batch_diarization` to return transcript input ID?
-        # Or just pass the text to LeMUR task via context? Passing text is easier/flexible.
-        
         lemur_output = aai.Lemur().task(
             prompt=system_prompt,
             input_text=full_transcript_text,
-            final_model=aai.LemurModel.claude3_5_sonnet # High intelligence model
+            final_model='google/gemini-3-pro-preview' # Use Gemini as requested
         )
         
         logger.info(f"🦁 LeMUR Response received. Tokens: {lemur_output.usage}")
@@ -408,20 +429,24 @@ Return ONLY a valid JSON object with this structure:
             clean_response = lemur_output.response.replace("```json", "").replace("```", "").strip()
             lemur_data = json.loads(clean_response)
             
-            lemur_analysis = lemur_data.get('summary')
+            # Extract Components
+            student_profile = lemur_data.get('student_profile', {})
+            lemur_analysis = lemur_data.get('internal_reasoning')
+            prioritized_to_do_list = lemur_data.get('prioritized_to_do_list', [])
             
             # Convert LeMUR errors to our ExtractedPhenomena format
-            for err in lemur_data.get('errors', []):
+            for err in lemur_data.get('annotated_errors', []):
                 extracted_phenomena.append({
-                    "item": err.get('text'),
-                    "category": err.get('domain'), # Will be cross-referenced later
-                    "context": f"{err.get('text')} -> {err.get('correction')}",
+                    "item": err.get('quote'),
+                    "category": err.get('linguistic_category'), 
+                    "context": f"{err.get('quote')} -> {err.get('correction')}",
                     "explanation": err.get('explanation'),
                     "correction": err.get('correction'),
-                    "confidence": 0.9 # High confidence from LeMUR
+                    "confidence": 0.9 
                 })
                 
             logger.info(f"✅ Extracted {len(extracted_phenomena)} linguistic phenomena")
+            logger.info(f"✅ Generated {len(prioritized_to_do_list)} remedial tasks")
             
         except json.JSONDecodeError:
             logger.error("❌ Failed to parse LeMUR JSON response")
@@ -468,7 +493,9 @@ Turns: {len(student_turns)}
             'sessionDate': timestamp,
             'duration': duration,
             'lemurAnalysis': lemur_analysis,
-            'extractedPhenomena': extracted_phenomena
+            'extractedPhenomena': extracted_phenomena,
+            'studentProfile': student_profile,
+            'prioritizedToDoList': prioritized_to_do_list
         }
     )
     
