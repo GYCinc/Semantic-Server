@@ -150,12 +150,61 @@ Categories: Syntax, Lexis, Pragmatics
 
 ## Corpus Commitment Flow
 
-Words are NOT auto-committed. Human curation required:
+Words are NOT auto-committed. Human curation required.
 
-1. Teacher views session in GitEnglishHub dashboard
-2. Clicks "Curate" → verifies student speaker
-3. Reviews pending words
-4. Clicks "Send to Student" → commits to corpus
+### Data Source: AssemblyAI Word-Level Transcript
+
+The corpus uses **AssemblyAI's word-for-word transcript** with full metadata:
+
+```json
+{
+  "text": "running",
+  "start": 1234,
+  "end": 1567,
+  "confidence": 0.98,
+  "speaker": "A"
+}
+```
+
+This is stored in `session.metrics.pending_words` after transcription.
+
+### Flow
+
+```
+AssemblyAI Transcription
+    ↓
+Words saved to session metrics (pending_words)
+    ↓
+Session appears in GitEnglishHub admin feed
+    ↓
+Teacher clicks "Curate" → verifies student speaker label
+    ↓
+Reviews pending words (can exclude specific words)
+    ↓
+Clicks "Send to Student" → POST /api/admin/sessions/commit-corpus
+    ↓
+Words filtered by selected speaker → inserted to student_corpus table
+```
+
+### Why Not Auto-Commit?
+
+1. **Speaker verification** - Must confirm which speaker is the student
+2. **Quality control** - Exclude filler words, false starts, unintelligible speech
+3. **Context** - Teacher can add notes for specific vocabulary items
+
+### Corpus Table Schema (`student_corpus`)
+
+| Column       | Type      | Description                 |
+| ------------ | --------- | --------------------------- |
+| `id`         | uuid      | Primary key                 |
+| `student_id` | uuid      | FK to students              |
+| `session_id` | uuid      | FK to student_sessions      |
+| `word`       | text      | The word/phrase             |
+| `start_ms`   | int       | Start timestamp in audio    |
+| `end_ms`     | int       | End timestamp in audio      |
+| `confidence` | float     | AssemblyAI confidence (0-1) |
+| `context`    | text      | Surrounding text (optional) |
+| `created_at` | timestamp | When committed              |
 
 This ensures quality control over vocabulary entries.
 
@@ -343,26 +392,57 @@ that, which, who, whom, whose, when, where, while, because, although, if, unless
 
 **What it does:** Uses AssemblyAI's LeMUR (Claude 3 Haiku) for linguistic analysis
 
-**Prompt (4-domain analysis):**
+### Default Prompt (from code)
 
 ```
-Analyze these 4 linguistic domains:
-1. Phonology (Pronunciation, intonation, connected speech)
-2. Lexis (Vocabulary range, collocations, idiomatic usage)
-3. Syntax (Grammar accuracy, sentence complexity, morphology)
-4. Pragmatics (Discourse coherence, register, turn-taking)
+As an expert ESL tutor, analyze the student's spoken English from this conversation.
+Focus strictly on observable linguistic phenomena relevant to language acquisition.
+Identify specific areas of strength and weakness in grammar, vocabulary, pronunciation,
+fluency (pauses, rate, fillers), and discourse coherence.
+Provide concrete examples from the transcript.
+DO NOT generate metaphorical language, philosophical interpretations,
+or content unrelated to ESL teaching and learning.
+Avoid any "hippie-like", abstract, or non-academic terminology.
+Present findings clearly and concisely, directly referencing the student's language use.
 ```
 
-**Output mapping to 6 public categories:**
-| LeMUR Domain | Maps To |
-|--------------|---------|
-| Phonology | Fluency & Flow |
-| Pragmatics | Fluency & Flow |
-| Syntax | Grammar |
-| Lexis (default) | Vocabulary |
-| Lexis + "phrasal verb" | Phrasal Verbs |
-| Lexis + "collocation" | Collocations |
-| Lexis + "idiom" | Idioms & Fixed Phrases |
+### Custom Prompt Support
+
+Teachers can set a custom `lemur_prompt` in the session data to override the default.
+This is stored in `session.lemur_prompt` and passed to the analysis.
+
+### How It's Called
+
+```python
+lemur = aai.Lemur()
+result = lemur.task(
+    prompt=full_lemur_prompt,
+    final_model='anthropic/claude-3-haiku',
+    input_text=input_text  # Full conversation transcript
+)
+```
+
+### Output
+
+Returns `lemur_analysis` object with:
+
+- `response`: The LLM's analysis text
+- `request_id`: AssemblyAI request ID for debugging
+- `usage`: Token usage stats
+
+### Category Mapping (Done in GitEnglishHub)
+
+The raw LeMUR response is parsed by GitEnglishHub and mapped to 6 public categories:
+
+| LeMUR Finding           | Maps To                |
+| ----------------------- | ---------------------- |
+| Pronunciation patterns  | Fluency & Flow         |
+| Discourse/turn-taking   | Fluency & Flow         |
+| Grammar errors          | Grammar                |
+| Vocabulary gaps         | Vocabulary             |
+| "phrasal verb" mentions | Phrasal Verbs          |
+| "collocation" mentions  | Collocations           |
+| "idiom" mentions        | Idioms & Fixed Phrases |
 
 ---
 
