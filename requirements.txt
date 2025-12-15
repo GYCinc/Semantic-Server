@@ -1,9 +1,10 @@
 assemblyai
-python-dotenv
-websockets
-pyaudio
-numpy
-psutil
 httpx
-textblob
+numpy
+openrouter>=0.1.1
+psutil
+pyaudio
+python-dotenv
 supabase
+textblob
+websockets
