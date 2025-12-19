@@ -174,63 +174,72 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
     from analyzers.pos_analyzer import POSAnalyzer
     from analyzers.ngram_analyzer import NgramAnalyzer
     from analyzers.verb_analyzer import VerbAnalyzer
-    from analyzers.article_analyzer import ArticleAnalyzer
-    from analyzers.amalgum_analyzer import AmalgumAnalyzer
-    from analyzers.comparative_analyzer import ComparativeAnalyzer
-    from analyzers.phenomena_matcher import PhenomenaPatternMatcher
-
-    # Construct unified JSON for analyzers
-    session_json = {
-        "session_id": str(uuid.uuid4()),
-        "student_name": student_name,
-        "teacher_name": "Aaron",
-        "speaker_map": {"A": "Aaron", "B": student_name}, # Heuristic
-        "start_time": datetime.now().isoformat(),
-        "turns": all_turns,
-        "notes": notes
-    }
-
-    main_analyzer = SessionAnalyzer(session_json)
-    basic_metrics = main_analyzer.analyze_all()
-    student_text = main_analyzer.student_full_text
-    tutor_text = main_analyzer.teacher_full_text
+        from analyzers.article_analyzer import ArticleAnalyzer
+        from analyzers.amalgum_analyzer import AmalgumAnalyzer
+        from analyzers.comparative_analyzer import ComparativeAnalyzer
+        from analyzers.phenomena_matcher import PhenomenaPatternMatcher
+        from analyzers.preposition_analyzer import PrepositionAnalyzer
+        from analyzers.learner_error_analyzer import LearnerErrorAnalyzer
     
-    logger.info("🧠 Running Tiered Analysis Suite...")
-    pos_counts = POSAnalyzer().analyze(student_text)
-    pos_ratios = POSAnalyzer().get_ratios(student_text)
-    ngram_data = NgramAnalyzer().analyze(student_text)
-    verb_data = VerbAnalyzer().analyze(student_text)
-    article_data = ArticleAnalyzer().analyze(student_text)
+        # Construct unified JSON for analyzers
+        session_json = {
+            "session_id": str(uuid.uuid4()),
+            "student_name": student_name,
+            "teacher_name": "Aaron",
+            "speaker_map": {"A": "Aaron", "B": student_name}, # Heuristic
+            "start_time": datetime.now().isoformat(),
+            "turns": all_turns,
+            "notes": notes
+        }
     
-    comp_data = ComparativeAnalyzer().compare(
-        student_data={"pos": pos_counts, "ngrams": ngram_data, "text": student_text},
-        tutor_data={"pos": POSAnalyzer().analyze(tutor_text), "ngrams": NgramAnalyzer().analyze(tutor_text), "text": tutor_text}
-    )
+        main_analyzer = SessionAnalyzer(session_json)
+        basic_metrics = main_analyzer.analyze_all()
+        student_text = main_analyzer.student_full_text
+        tutor_text = main_analyzer.teacher_full_text
+        
+        logger.info("🧠 Running Tiered Analysis Suite...")
+        pos_counts = POSAnalyzer().analyze(student_text)
+        pos_ratios = POSAnalyzer().get_ratios(student_text)
+        ngram_data = NgramAnalyzer().analyze(student_text)
+        verb_data = VerbAnalyzer().analyze(student_text)
+        article_data = ArticleAnalyzer().analyze(student_text)
+        prep_data = PrepositionAnalyzer().analyze(student_text)
+        learner_data = LearnerErrorAnalyzer().analyze(student_text)
+        
+        comp_data = ComparativeAnalyzer().compare(
+            student_data={"pos": pos_counts, "ngrams": ngram_data, "text": student_text},
+            tutor_data={"pos": POSAnalyzer().analyze(tutor_text), "ngrams": NgramAnalyzer().analyze(tutor_text), "text": tutor_text}
+        )
+        
+        detected_errors = []
+        # Standardize Article Errors (List)
+        if isinstance(article_data, list):
+            detected_errors.extend([{'error_type': 'Article Error', 'text': e['match']} for e in article_data])
+        
+        # Standardize Verb Errors
+        verb_errs = verb_data.get('irregular_errors', [])
+        detected_errors.extend([{'error_type': 'Verb Error', 'text': e['verb']} for e in verb_errs])
     
-    detected_errors = []
-    # Standardize Article Errors (List)
-    if isinstance(article_data, list):
-        detected_errors.extend([{'error_type': 'Article Error', 'text': e['match']} for e in article_data])
+        # Standardize Preposition Errors
+        detected_errors.extend([{'error_type': 'Preposition Error', 'text': e['item']} for e in prep_data])
     
-    # Standardize Verb Errors
-    verb_errs = verb_data.get('irregular_errors', [])
-    detected_errors.extend([{'error_type': 'Verb Error', 'text': e['verb']} for e in verb_errs])
+        # Standardize Learner Errors (PELIC)
+        detected_errors.extend([{'error_type': f"Learner: {e.get('category')}", 'text': e['item']} for e in learner_data])
+        
+        # Pattern Matching
+        try:
+            pattern_matches = PhenomenaPatternMatcher().match(student_text)
+            for m in pattern_matches:
+                detected_errors.append({'error_type': f"Pattern: {m.get('category')}", 'text': m.get('item')})
+        except: pass
     
-    # Pattern Matching
-    try:
-        pattern_matches = PhenomenaPatternMatcher().match(student_text)
-        for m in pattern_matches:
-            detected_errors.append({'error_type': f"Pattern: {m.get('category')}", 'text': m.get('item')})
-    except:
-        pass
-
-    analysis_context = {
-        "caf_metrics": basic_metrics.get('caf_metrics') or "DATA_MISSING",
-        "comparison": comp_data,
-        "register_analysis": {"scores": AmalgumAnalyzer().analyze_register(student_text), "classification": AmalgumAnalyzer().get_genre_classification(student_text)},
-        "detected_errors": detected_errors,
-        "pos_summary": pos_ratios
-    }
+        analysis_context = {
+            "caf_metrics": basic_metrics.get('caf_metrics') or "DATA_MISSING",
+            "comparison": comp_data,
+            "register_analysis": {"scores": AmalgumAnalyzer().analyze_register(student_text), "classification": AmalgumAnalyzer().get_genre_classification(student_text)},
+            "detected_errors": detected_errors,
+            "pos_summary": pos_ratios
+        }
 
     # 3. LLM Gateway Synthesis (Claude 4.5 for Batch)
     from analyzers.lemur_query import run_lemur_query

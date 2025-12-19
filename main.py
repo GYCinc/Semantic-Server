@@ -167,7 +167,12 @@ async def upload_analysis_to_hub(session_data):
         with open(session_path, 'r') as f:
             full_json = json.load(f)
         
-        # 1. RUN LOCAL ANALYZERS (Using Top-Level Imports)
+        from analyzers.comparative_analyzer import ComparativeAnalyzer
+        from analyzers.phenomena_matcher import PhenomenaPatternMatcher
+        from analyzers.preposition_analyzer import PrepositionAnalyzer
+        from analyzers.learner_error_analyzer import LearnerErrorAnalyzer
+
+        # Re-construct SessionAnalyzer with full data
         main_analyzer = SessionAnalyzer(full_json)
         basic_metrics = main_analyzer.analyze_all()
         student_text = main_analyzer.student_full_text
@@ -179,6 +184,8 @@ async def upload_analysis_to_hub(session_data):
         ngram_data = NgramAnalyzer().analyze(student_text)
         verb_data = VerbAnalyzer().analyze(student_text)
         article_data = ArticleAnalyzer().analyze(student_text)
+        prep_data = PrepositionAnalyzer().analyze(student_text)
+        learner_data = LearnerErrorAnalyzer().analyze(student_text)
         
         tutor_pos_counts = POSAnalyzer().analyze(tutor_text)
         tutor_ngram = NgramAnalyzer().analyze(tutor_text)
@@ -189,11 +196,19 @@ async def upload_analysis_to_hub(session_data):
         )
         
         detected_errors = []
-        article_errs = article_data if isinstance(article_data, list) else [] # Handle list fix
-        detected_errors.extend([{'error_type': 'Article Error', 'text': e['match']} for e in article_errs])
+        # Standardize Article Errors
+        if isinstance(article_data, list):
+            detected_errors.extend([{'error_type': 'Article Error', 'text': e['match']} for e in article_data])
         
+        # Standardize Verb Errors
         verb_errs = verb_data.get('irregular_errors', [])
         detected_errors.extend([{'error_type': 'Verb Error', 'text': e['verb']} for e in verb_errs])
+
+        # Standardize Preposition Errors
+        detected_errors.extend([{'error_type': 'Preposition Error', 'text': e['item']} for e in prep_data])
+
+        # Standardize Learner Errors (PELIC)
+        detected_errors.extend([{'error_type': f"Learner: {e.get('category')}", 'text': e['item']} for e in learner_data])
         
         try:
             pattern_matches = PhenomenaPatternMatcher().match(student_text)
