@@ -104,7 +104,7 @@ async def send_to_gitenglish(action: str, student_id_or_name: str, params: dict[
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-async def perform_batch_diarization(audio_path: str, student_name: str) -> tuple[list[SessionTurn] | None, float | None]:
+async def perform_batch_diarization(audio_path: str, student_name: str) -> dict[str, Any] | None:
     """
     High-Definition Batch Diarization (DUAL-PASS PROTOCOL).
     Pass 1: Get Speaker Labels (Requires Punctuation).
@@ -122,7 +122,7 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> tuple
         speaker_labels=True,
         speakers_expected=2,
         punctuate=True,
-        format_text=False
+        format_text=True # Need True for full readability
     )
     
     # --- PASS 2: CONTENT (Raw Reality) ---
@@ -151,10 +151,10 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> tuple
         
         if t_diar.status == aai.TranscriptStatus.error:
             logger.error(f"❌ Pass 1 Failed: {t_diar.error}")
-            return None, None
+            return None
         if t_raw.status == aai.TranscriptStatus.error:
             logger.error(f"❌ Pass 2 Failed: {t_raw.error}")
-            return None, None
+            return None
 
         logger.info("   ✅ Both passes complete. Merging...")
 
@@ -253,35 +253,55 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> tuple
             })
 
         audio_duration = float(t_raw.audio_duration or 0.0)
+
+        # Extract Rich Data from Pass 1
+        punctuated_text = t_diar.text or ""
+        sentences = []
+        try:
+             # Try to get sentences if available
+             sentences = [{"text": s.text, "start": s.start, "end": s.end} for s in t_diar.get_sentences()]
+        except:
+             # Fallback if get_sentences() fails or isn't available
+             pass
+
         logger.info(f"✅ Dual-Pass Merge Complete. Turns: {len(all_turns)}")
-        return all_turns, audio_duration
+
+        return {
+            "turns": all_turns,
+            "duration": audio_duration,
+            "punctuated_text": punctuated_text,
+            "sentences": sentences
+        }
 
     except Exception as e:
         logger.error(f"❌ Dual-Pass Diarization error: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        return None, None
+        return None
 
 async def process_and_upload(audio_path: str, student_name: str, notes: str = ""):
     logger.info(f"🚀 Batch Ingest: {audio_path} for {student_name}")
     
     # 1. Diarize
-    all_turns, duration = await perform_batch_diarization(audio_path, student_name)
-    if all_turns is None or duration is None:
+    diar_result = await perform_batch_diarization(audio_path, student_name)
+    if not diar_result:
         logger.error("❌ Processing failed.")
         return
 
+    all_turns = diar_result["turns"]
+    duration = diar_result["duration"]
+
     # 2. Local Analysis (Tiered Suite)
-    from AssemblyAIv2.analyzers.session_analyzer import SessionAnalyzer
-    from AssemblyAIv2.analyzers.pos_analyzer import POSAnalyzer
-    from AssemblyAIv2.analyzers.ngram_analyzer import NgramAnalyzer
-    from AssemblyAIv2.analyzers.verb_analyzer import VerbAnalyzer
-    from AssemblyAIv2.analyzers.article_analyzer import ArticleAnalyzer
-    from AssemblyAIv2.analyzers.amalgum_analyzer import AmalgumAnalyzer
-    from AssemblyAIv2.analyzers.comparative_analyzer import ComparativeAnalyzer
-    from AssemblyAIv2.analyzers.phenomena_matcher import ErrorPhenomenonMatcher
-    from AssemblyAIv2.analyzers.preposition_analyzer import PrepositionAnalyzer
-    from AssemblyAIv2.analyzers.learner_error_analyzer import LearnerErrorAnalyzer
+    from analyzers.session_analyzer import SessionAnalyzer
+    from analyzers.pos_analyzer import POSAnalyzer
+    from analyzers.ngram_analyzer import NgramAnalyzer
+    from analyzers.verb_analyzer import VerbAnalyzer
+    from analyzers.article_analyzer import ArticleAnalyzer
+    from analyzers.amalgum_analyzer import AmalgumAnalyzer
+    from analyzers.comparative_analyzer import ComparativeAnalyzer
+    from analyzers.phenomena_matcher import ErrorPhenomenonMatcher
+    from analyzers.preposition_analyzer import PrepositionAnalyzer
+    from analyzers.learner_error_analyzer import LearnerErrorAnalyzer
         
     # Construct unified JSON for analyzers
     session_json = {
@@ -344,14 +364,14 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
     }
 
     # 3. LLM Gateway Synthesis (Claude 4.5 for Batch)
-    from .analyzers.llm_gateway import run_lm_gateway_query
+    from analyzers.llm_gateway import run_lm_gateway_query
     # Create temp file for lemur_query
     temp_path = Path(f"batch_staging_{uuid.uuid4().hex}.json")
     with open(str(temp_path), 'w') as f: json.dump(session_json, f)
             
     # Run analysis (Note: lm_gateway is currently set to gemini-1.5-pro, 
     # but we can override model here if we want maximum depth)
-    from .analyzers.schemas import Turn
+    from analyzers.schemas import Turn
     turn_objs: list[Turn] = []
     for i, t in enumerate(all_turns or []):
         turn_objs.append(Turn(
@@ -400,8 +420,10 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
             })
 
     params = {
-        'turns': [{"speaker": t.get("speaker"), "transcript": t.get("transcript")} for t in all_turns if isinstance(t, dict)],
+        'turns': [{"speaker": t.get("speaker"), "transcript": t.get("transcript"), "words": t.get("words")} for t in all_turns if isinstance(t, dict)],
         'transcriptText': "\n".join([f"{t['speaker']}: {t['transcript']}" for t in all_turns if isinstance(t, dict)]),
+        'punctuatedTranscript': diar_result.get("punctuated_text", ""),
+        'sentences': diar_result.get("sentences", []),
         'sessionDate': session_json['start_time'],
         'duration': duration,
         'lmAnalysis': gateway_data.get('response', 'No reasoning provided.') if isinstance(gateway_data, dict) else 'No reasoning provided.',
