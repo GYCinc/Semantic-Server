@@ -48,10 +48,17 @@ class TestHandoffPipeline(unittest.IsolatedAsyncioTestCase):
             MagicMock(text="world", start=500, end=1000, confidence=0.9)
         ]
 
+        # Mock Sentences
+        mock_sentence = MagicMock()
+        mock_sentence.text = "Hello world."
+        mock_sentence.start = 0
+        mock_sentence.end = 1000
+
         mock_transcript_diar = MagicMock()
         mock_transcript_diar.status = "completed"
         mock_transcript_diar.utterances = [mock_utt]
         mock_transcript_diar.text = "Hello world."
+        mock_transcript_diar.get_sentences.return_value = [mock_sentence]
 
         # Mock Raw Transcript (Pass 2)
         mock_transcript_raw = MagicMock()
@@ -127,6 +134,8 @@ class TestHandoffPipeline(unittest.IsolatedAsyncioTestCase):
         params = payload['params']
         self.assertIn('turns', params)
         self.assertIn('transcriptText', params)
+        self.assertIn('punctuatedTranscript', params)
+        self.assertIn('sentences', params)
         self.assertIn('errorPhenomena', params)
         self.assertIn('lmAnalysis', params)
 
@@ -134,6 +143,8 @@ class TestHandoffPipeline(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params['notes'], "Test Notes")
         self.assertEqual(len(params['turns']), 1)
         self.assertEqual(params['turns'][0]['transcript'], "Hello world")
+        self.assertEqual(params['punctuatedTranscript'], "Hello world.")
+        self.assertEqual(len(params['sentences']), 1)
 
         # Check Error Phenomena (Merged from LLM + Rule Based)
         # Note: Rule based might find nothing on "Hello world", but LLM mock had one.
