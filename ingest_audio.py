@@ -38,7 +38,8 @@ logger = logging.getLogger("IngestAudio")
 AAI_API_KEY: str = os.getenv("AAI_API_KEY", os.getenv("ASSEMBLYAI_API_KEY", ""))
 GITENGLISH_API_BASE: str = os.getenv("GITENGLISH_API_BASE", "https://gitenglish.com")
 GITENGLISH_MCP_SECRET: str = os.getenv("MCP_SECRET", "")
-MISTRAL_API_KEY: str = os.getenv("MISTRAL_API_KEY", "")
+# Using OpenRouter for Gemini Intelligence
+OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
 
 # --- NO DIRECT DATABASE CONNECTIONS ---
 # Everything flows through the GitEnglishHub API
@@ -54,8 +55,8 @@ if AAI_API_KEY:
 if not GITENGLISH_MCP_SECRET:
     logger.warning("⚠️ GITENGLISH_MCP_SECRET not set! Hub API calls will fail.")
 
-if not MISTRAL_API_KEY:
-    logger.warning("⚠️ MISTRAL_API_KEY not set! Boss MF analysis will be skipped.")
+if not OPENROUTER_API_KEY:
+    logger.warning("⚠️ OPENROUTER_API_KEY not set! AI Analysis will be skipped.")
 
 # --- TypedDict Definitions ---
 
@@ -128,20 +129,20 @@ async def generate_llm_analysis(
     analysis_context: dict[str, Any]
 ) -> dict[str, Any]:
     """
-    Generates the 'Boss MF' analysis using the Universal Guru Prompt.
+    Generates the Session Analysis using the AssemblyAI LLM Gateway (integrated model).
     """
-    if not MISTRAL_API_KEY:
-        logger.warning("🚫 LLM Analysis skipped: MISTRAL_API_KEY missing.")
+    if not AAI_API_KEY:
+        logger.warning("🚫 LLM Analysis skipped: AAI_API_KEY missing.")
         return {
             "schemaVersion": "0.1.0",
-            "termination": {"reason": "skipped", "detail": "MISTRAL_API_KEY missing"},
-            "response": "LLM Analysis Unavailable",
+            "termination": {"reason": "skipped", "detail": "API_KEY missing"},
+            "response": "Analysis Unavailable",
             "annotated_errors": [],
             "student_profile": {}
         }
         
     try:
-        # 1. Read the Boss MF Prompt
+        # 1. Read the Universal Guru Prompt
         prompt_path = WORKSPACE_ROOT / "AssemblyAIv2" / "UNIVERSAL_GURU_PROMPT.txt"
         if not prompt_path.exists():
              logger.error(f"❌ Prompt not found at {prompt_path}")
@@ -151,7 +152,6 @@ async def generate_llm_analysis(
             system_prompt = f.read()
 
         # 2. Prepare Context (Hyper RAG)
-        # We inject the "Three Layers of Reality"
         user_message = f"""
 SESSION DATA FOR: {student_name}
 
@@ -159,10 +159,7 @@ SESSION DATA FOR: {student_name}
 {transcript_text}
 
 [LAYER 2: USER NOTES (GOD-TIER)]
-{user_notes if user_notes else "No specific user notes provided for this session."}
-
-[LAYER 3: PREPLY/EXTERNAL NOTES]
-(None provided for this session - treat User Notes as supreme authority)
+{user_notes if user_notes else "No specific user notes provided for this session."} 
 
 [LOCAL ANALYSIS HINTS]
 Errors detected by rule-based system: {json.dumps(analysis_context.get('detected_errors', []), default=str)}
@@ -170,15 +167,44 @@ Errors detected by rule-based system: {json.dumps(analysis_context.get('detected
 ANALYZE NOW. OUTPUT JSON ONLY.
 """
 
-        # 3. Call the Gateway (The Gangsta Way)
-        from AssemblyAIv2.analyzers import llm_gateway
+        # 3. Call LLM Gateway
+        logger.info("🦅 Connecting to AssemblyAI LLM Gateway (gemini-3-flash-preview)...")
         
-        parsed = await llm_gateway.generate_analysis(
-            system_prompt=system_prompt,
-            user_message=user_message
-        )
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                "https://llm-gateway.assemblyai.com/v1/chat/completions",
+                headers={
+                    "authorization": AAI_API_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gemini-3-flash-preview",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    "max_tokens": 20000,
+                    "temperature": 0.2
+                }
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"❌ Gateway Error {response.status_code}: {response.text}")
+                return {"error": "Gateway Error"}
+                
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
         
-        if parsed:
+        if content:
+            # Extract JSON
+            clean_content = content.strip()
+            if "```json" in clean_content:
+                clean_content = clean_content.split("```json")[1].split("```")[0].strip()
+            elif "```" in clean_content:
+                clean_content = clean_content.split("```")[1].split("```")[0].strip()
+            
+            parsed = json.loads(clean_content)
+            
             return {
                 "termination": {"reason": "success"},
                 "response": parsed.get("session_summary", ""),
@@ -187,10 +213,10 @@ ANALYZE NOW. OUTPUT JSON ONLY.
                 "raw_output": parsed
             }
         
-        logger.warning("⚠️ LLM Gateway returned None (Analysis Skipped)")
+        logger.warning("⚠️ LLM Gateway returned empty response")
         return {
             "schemaVersion": "0.1.0",
-            "termination": {"reason": "skipped", "detail": "LLM Gateway returned None"},
+            "termination": {"reason": "skipped", "detail": "Empty response"},
             "response": "Analysis Skipped",
             "annotated_errors": []
         }
@@ -227,20 +253,33 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> Mappi
 
     # If we have a cached result for this hash, USE IT.
     if file_hash and file_hash in cache_data:
-        logger.info(f"⚡ CACHE HIT! Skipping Upload & Transcription for {file_hash[:8]}...")
+        logger.info(f"⚡ CACHE HIT (Local)! Skipping Upload & Transcription for {file_hash[:8]}...")
         return cast(Mapping[str, object], cache_data[file_hash])
+
+    # [NEW] Hub-Level Deduplication (Zero Waste)
+    if file_hash:
+        logger.info(f"🔍 Checking Hub for existing session with hash {file_hash[:8]}...")
+        # We use a dummy studentId for lookup or better, an action that doesn't require it
+        check_res = await send_to_gitenglish("ingest.checkHash", "system", {"fileHash": file_hash})
+        if check_res.get('success') and check_res.get('data', {}).get('exists'):
+            logger.info("⚡ CACHE HIT (Hub)! Reclaiming existing session data...")
+            return cast(Mapping[str, object], check_res.get('data', {}).get('result'))
 
     transcriber = aai.Transcriber()
     
     # --- PASS 1: STRUCTURE (Diarization) ---
-    logger.info("   🔹 Pass 1: Extracting Speaker Labels (Universal, Punctuation=ON)...")
+    logger.info("   🔹 Pass 1: Extracting Speaker Labels (Universal, Punctuation=ON, Enhanced Metadata=ON)...")
     config_diar = aai.TranscriptionConfig(
         speech_model=aai.SpeechModel.universal,
         language_code="en_us",
         speaker_labels=True,
         speakers_expected=2,
         punctuate=True,
-        format_text=False
+        format_text=False,
+        sentiment_analysis=True,
+        entity_detection=True,
+        auto_highlights=True,
+        content_safety=True
     )
     
     # --- PASS 2: CONTENT (Raw Reality) ---
@@ -252,7 +291,9 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> Mappi
         speakers_expected=2,
         punctuate=False,
         format_text=False,
-        disfluencies=True
+        disfluencies=True,
+        sentiment_analysis=True,
+        entity_detection=True
     )
 
     try:
@@ -430,11 +471,45 @@ async def perform_batch_diarization(audio_path: str, student_name: str) -> Mappi
         logger.error(traceback.format_exc())
         return None
 
-async def process_and_upload(audio_path: str, student_name: str, notes: str = "") -> Mapping[str, object]:
-    logger.info(f"🚀 Batch Ingest: {audio_path} for {student_name}")
+async def process_and_upload(audio_path: str, student_name: str, notes: str = "", transcript_id: str | None = None) -> Mapping[str, object]:
+    logger.info(f"🚀 Batch Ingest: {audio_path if audio_path else 'Existing ID'} for {student_name}")
     
-    # 1. Diarize
-    diar_result = await perform_batch_diarization(audio_path, student_name)
+    diar_result = None
+    if transcript_id:
+        logger.info(f"🔗 Using existing Transcript ID: {transcript_id}")
+        transcriber = aai.Transcriber()
+        try:
+            # Corrected SDK call
+            t_diar = aai.Transcript.get_by_id(transcript_id)
+            
+            # Reconstruct turns from utterances
+            all_turns = []
+            if t_diar.utterances:
+                for utt in t_diar.utterances:
+                    all_turns.append({
+                        'speaker': utt.speaker or "Unknown",
+                        'transcript': utt.text,
+                        'start': utt.start,
+                        'end': utt.end,
+                        'confidence': utt.confidence,
+                        'words': [{'text': w.text, 'start': w.start, 'end': w.end, 'confidence': w.confidence, 'speaker': utt.speaker} for w in utt.words]
+                    })
+            
+            diar_result = {
+                "turns": all_turns,
+                "duration": float(t_diar.audio_duration or 0.0),
+                "punctuated_text": t_diar.text or "",
+                "sentences": [], # sentences might not be easily fetchable without another call, keep simple
+                "raw_transcript_text": t_diar.text,
+                "diarized_transcript_text": t_diar.text
+            }
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch existing transcript {transcript_id}: {e}")
+            return {"success": False, "error": "transcript_fetch_failed"}
+    else:
+        # 1. Diarize via audio file
+        diar_result = await perform_batch_diarization(audio_path, student_name)
+    
     if not diar_result:
         logger.error("❌ Processing failed.")
         return {"success": False, "error": "diarization_failed"}
@@ -558,18 +633,61 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
         "pos_summary": pos_ratios
     }
 
-    # 3. LLM_ANALYSIS (Boss MF)
-    logger.info("🦅 Generating Boss MF Analysis...")
+    # 3. LLM_ANALYSIS (Gemini 3 Flash Preview)
     transcript_full = "\n".join([f"{t['speaker']}: {t['transcript']}" for t in all_turns])
+    llm_analysis = diar_result.get('llm_analysis')
     
-    llm_analysis = await generate_llm_analysis(
-        student_name=student_name,
-        transcript_text=transcript_full,
-        user_notes=notes,
-        analysis_context=analysis_context
-    )
+    if llm_analysis:
+        logger.info("⚡ AI CACHE HIT! Reusing existing analysis...")
+    else:
+        logger.info("🦅 Generating AI Session Analysis (Gemini 3 Flash Preview)...")
+        
+        llm_analysis = await generate_llm_analysis(
+            student_name=student_name,
+            transcript_text=transcript_full,
+            user_notes=notes,
+            analysis_context=analysis_context
+        )
+        
+        # Save AI result to cache
+        file_hash = calculate_file_hash(audio_path)
+        if file_hash:
+            cache_path = WORKSPACE_ROOT / "AssemblyAIv2/ingestion_cache.json"
+            try:
+                current_cache = {}
+                if cache_path.exists():
+                    with open(cache_path, "r") as f:
+                        current_cache = json.load(f)
+                
+                if file_hash in current_cache:
+                    current_cache[file_hash]['llm_analysis'] = llm_analysis
+                    with open(cache_path, "w") as f:
+                        json.dump(current_cache, f, indent=2)
+                    logger.info(f"💾 AI Analysis cached for {file_hash[:8]}")
+            except: pass
 
     # 4. Final Handoff to Hub API
+    # ... [error_phenomena logic] ...
+    
+    # [NEW] SAVE TO CACHE BEFORE HANDOFF (Include AI Result)
+    if diar_result and not diar_result.get('llm_analysis'):
+        # Update the original diar_result with the AI analysis so the cache write at the end of diarization captures it
+        # Actually, diarization happens before this. We need to manually update the cache file now.
+        file_hash = calculate_file_hash(audio_path)
+        if file_hash:
+            cache_path = WORKSPACE_ROOT / "AssemblyAIv2/ingestion_cache.json"
+            try:
+                current_cache = {}
+                if cache_path.exists():
+                    with open(cache_path, "r") as f:
+                        current_cache = json.load(f)
+                
+                if file_hash in current_cache:
+                    current_cache[file_hash]['llm_analysis'] = llm_analysis
+                    with open(cache_path, "w") as f:
+                        json.dump(current_cache, f, indent=2)
+                    logger.info(f"💾 AI Analysis cached for {file_hash[:8]}")
+            except: pass
     error_phenomena = []
     if isinstance(llm_analysis, dict):
         annotated_errors = llm_analysis.get('annotated_errors', [])
@@ -581,7 +699,7 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
                         "correction": err.get('suggestedCorrection') or err.get('correction'),
                         "category": err.get('category', 'Syntax'),
                         "explanation": err.get('explanation'),
-                        "source": f"BOSS_MF_{err.get('source_weight', 'AUTO')}"
+                        "source": f"AI_{err.get('source_weight', 'AUTO')}"
                     })
     
     for err in detected_errors:
@@ -609,13 +727,23 @@ async def process_and_upload(audio_path: str, student_name: str, notes: str = ""
         'llmAnalysis': llm_analysis,
         'localAnalysis': analysis_context,
         'notes': notes,
-        'fileHash': calculate_file_hash(audio_path)
+        'fileHash': calculate_file_hash(audio_path),
+        # Enhanced Metadata Pass-through
+        'assemblyai_raw_response': diar_result.get("raw_response_diar"),
+        'assemblyai_content_response': diar_result.get("raw_response_raw")
     }
     logger.info(f"📤 Sending Payload to Hub API for student: {student_name}")
     result = await send_to_gitenglish(action='ingest.createSession', student_id_or_name=student_name, params=params)
     
+    # LOG THE FULL RESULT for debugging
+    logger.info(f"📡 Full Hub API Response: {json.dumps(result, indent=2)}")
+    
     if result.get('success'):
-        logger.info(f"🎉 Ingestion Complete! Session: {result.get('sessionId')}")
+        # Extract sessionId from nested data object
+        api_data = cast(dict[str, Any], result.get('data', {}))
+        session_id = api_data.get('sessionId')
+        logger.info(f"🎉 Ingestion Complete! Session: {session_id}")
+        return {**result, "sessionId": session_id} # Flat map for legacy compatibility in tests
     else:
         logger.error(f"❌ Ingestion failed: {result.get('error')}")
 
@@ -626,10 +754,14 @@ async def main():
     print("🎧 BATCH AUDIO INGESTION TOOL")
     print("="*60)
     
-    audio_path = input("\n📁 Audio File Path: ").strip().replace("'", "").replace('"', "")
-    if not os.path.exists(audio_path):
-        print("❌ File not found.")
-        return
+    transcript_id = input("\n🔗 Existing AssemblyAI Transcript ID (Leave blank to use file): ").strip()
+    
+    audio_path = ""
+    if not transcript_id:
+        audio_path = input("\n📁 Audio File Path: ").strip().replace("'", "").replace('"', "")
+        if not os.path.exists(audio_path):
+            print("❌ File not found.")
+            return
 
     students = get_existing_students()
     print("\n🎓 Select Student:")
@@ -644,8 +776,8 @@ async def main():
         return
 
     notes = input("\n📝 Session Notes (Optional): ").strip()
-    _ = await process_and_upload(audio_path, student_name, notes)
+    _ = await process_and_upload(audio_path, student_name, notes, transcript_id=transcript_id)
 
 if __name__ == "__main__":
-    try: asyncio.run(main())
+    try: asyncio.run(main()) # type: ignore
     except KeyboardInterrupt: pass
