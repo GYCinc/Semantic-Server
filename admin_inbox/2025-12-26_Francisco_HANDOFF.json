@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "student": "Francisco",
+    "date": "2025-12-26",
+    "version": "v4.6.0-Sovereign",
+    "pipeline": "PettyDantic -> MiniGuru"
+  },
+  "step_1_taxonomy": {
+    "student_name": "Francisco",
+    "errors": [
+      {
+        "original_utterance": "In United States, you can do it, okay?",
+        "corrected_utterance": "In the United States, you can do it, okay?",
+        "immutable_6_category": "Grammar",
+        "sub_category": "Articles"
+      },
+      {
+        "original_utterance": "I try I trying to, to ask the...",
+        "corrected_utterance": "I was trying to ask...",
+        "immutable_6_category": "Grammar",
+        "sub_category": "Verb Tense/Structure"
+      },
+      {
+        "original_utterance": "the people work and studied at the university living in her, in their parents house",
+        "corrected_utterance": "people who work and study at the university live in their parents' house",
+        "immutable_6_category": "Grammar",
+        "sub_category": "Subject-Verb Agreement / Tense Consistency"
+      },
+      {
+        "original_utterance": "They don't used to accept the honest of the.",
+        "corrected_utterance": "They don't usually accept the honesty of...",
+        "immutable_6_category": "Grammar",
+        "sub_category": "Habitual Actions (Used to vs. Usually)"
+      },
+      {
+        "original_utterance": "The Argentinians are buried directly when. When we speak.",
+        "corrected_utterance": "Argentinians are very direct when we speak.",
+        "immutable_6_category": "Fluency & Flow",
+        "sub_category": "Phonetic Confusion (Buried vs. Very)"
+      }
+    ]
+  },
+  "step_2_mini_guru_feedback": "Listen to me, Francisco. You’re diving deep into the psychology of independence and cultural maturity, but your English is playing in the sandbox. You’re talking about grown-man problems while making 'people is' mistakes. That’s a Subject-Verb Agreement violation, and in my world, that’s a felony. You keep using 'used to' when you mean 'usually'—one is for the past, the other is for your current reality. Get it straight. You’re also dropping articles like 'the' as if they’re optional. They aren't. If you want to command respect in a conversation about high-level social dynamics, you can't sound like you're still learning the basics of pluralization. Tighten up the 'Immutable 6,' stop being sloppy with your verbs, and start speaking with the precision of the Boss I know you can be. Fix it.",
+  "timestamp": "2025-12-27T14:05:00Z"
+}

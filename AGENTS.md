@@ -70,3 +70,7 @@ All "nitty-gritty" linguistic phenomena (Petty Dantic) must map to one of these.
 
 *   **Frontend Verification:** Use `verify_dashboard.py` (Playwright) to check if UI elements (like the Notes widget) are rendering correctly.
 *   **No "Teaching" Logic:** This repo is for *Analysis* only. Teaching agents belong in the external GitEnglishHub.
+
+## ⚡ Performance Protocol (Universal)
+- **Cache First:** Use `redis` tools for session state and quick lookups before querying Supabase.
+- **Fail Fast:** If Redis is down, proceed to DB but log the cache miss.

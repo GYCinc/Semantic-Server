@@ -1,0 +1,69 @@
+{
+  "metadata": {
+    "student": "Francisco",
+    "student_id": "244ef8ff-e7d6-400a-8dc6-3cb187ff92c4",
+    "date": "2025-12-26",
+    "version": "v4.6.0-Sovereign-Agentic",
+    "soul": "Frank",
+    "provider": "Mistral (Scale Mode)",
+    "status": "GREEN"
+  },
+  "sanity_context": {
+    "l1": "Argentinian Spanish (Rioplatense)",
+    "motivation": "Marketing/Licensing Manager at Converse",
+    "background": "Old school Argentinian directness in Chilean Falabella/Converse context",
+    "lore_attached": true
+  },
+  "guru_synthesis_prompt_preview": {
+    "role": "Mini-Guru Frank",
+    "tone": "Spiritually Disciplined Boss MF",
+    "instruction": "Accept student state but demand discipline. Use Argentinian directness. Mentor the tutor Aaron while correcting the marketing manager Francisco."
+  },
+  "user_facing_feedback": {
+    "title": "The Discipline of Professional Truth: Francisco",
+    "summary": "Francisco, your Argentinian soul is built for directness, but your English grammar is currently a 'politeness trap'—it's hiding your authority. You're managing budgets at Converse but managing plurals like a novice. True spiritual discipline in language means matching your internal strength with external precision. You listened to Aaron's Mexico rants; now listen to the truth about your own flow.",
+    "phenomena": [
+      {
+        "item": "people is",
+        "category": "Grammar",
+        "context": "There is a lot of people in general just it's more crowded...",
+        "type": "error",
+        "explanation": "Collective souls require plural verbs. 'People are' is the anchor of your authority. 'People is' is a felony that softens your voice.",
+        "correction": "People are",
+        "confidence": 0.99
+      },
+      {
+        "item": "used to",
+        "category": "Grammar",
+        "context": "because I used to be I used to be hurt...",
+        "type": "error",
+        "explanation": "You're confusing past states with present reality. In the context of your ultimatum to that junior employee, you need to use 'usually' or 'I am currently' to maintain the timeline of truth.",
+        "correction": "I was",
+        "confidence": 0.95
+      },
+      {
+        "item": "crabs in the bucket",
+        "category": "Idioms & Phrases",
+        "context": "it's like a bunch of crabs in the bucket but times ten",
+        "type": "pattern",
+        "explanation": "Spiritual mastery of the idiom. You used this perfectly to describe the cultural gravity holding people back. Keep this visceral connection.",
+        "confidence": 1.0
+      },
+      {
+        "item": "like (shield)",
+        "category": "Fluency & Flow",
+        "context": "it was like a trip well if you've paid rent how you know what it like feels like to like do something...",
+        "type": "error",
+        "explanation": "You use 'like' as a spiritual shield to avoid silence. Silence is strength. Drop the shield. Speak with the weight of an Argentinian manager.",
+        "correction": "[Remove fillers]",
+        "confidence": 0.9
+      }
+    ],
+    "prioritizedToDoList": [
+      "Plural Discipline: Kill every 'People is' in your vocabulary.",
+      "The Ultimatum: Practice your next management confrontation without using 'like' once.",
+      "Converse Context: Use 'Morever' and 'However' in your next budget report to show formal authority."
+    ]
+  },
+  "agentic_notes": "Prompt now allows Tool Calling for COCA-60000 verification and Sanity Phenomenon matching. This report was generated with Francisco's full psychological profile attached."
+}
